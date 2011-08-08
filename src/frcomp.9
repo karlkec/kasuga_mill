@@ -1,0 +1,57 @@
+.TH FRCOMP "9" "2011-06-01" "EMC Documentation" "HAL Component"
+.de TQ
+.br
+.ns
+.TP \\$1
+..
+
+.SH NAME
+
+frcomp \- EMC2 HAL function providing friction compensation
+.SH SYNOPSIS
+.HP
+.B loadrt frcomp [count=\fIN\fB|names=\fIname1\fB[,\fIname2...\fB]]
+.SH DESCRIPTION
+
+
+Provides friction compensation. Intended to be inserted between the pid output and a pwm or other drive component
+in a servo system. This component compensates for lack of motion seen by many servo systems with small
+torque or velocity commands. It tries to overcome friction by providing a higher gain for small-magnitude movements.
+
+This function provides a transfer function which has a high-gain portion when in between motion_tol_neg and motion_tol_pos, and
+gain of 1 outside this range. The output is continuous and monotonic provided motion_tol_pos is greater than 
+motion_tol_neg, and mech_friction_pos is greater than mech_friction_neg.
+
+Usually motion_tol_pos and motion_tol_neg should be symmetrical around zero. Use caution with small differences between 
+motion_tol_pos and motion_tol_neg, as this can result in high gain around zero which can affect pid loop stability.
+Often a ratio of 5:1 or less is sufficient for the mech_friction range divided by the motion_tol range.
+.SH FUNCTIONS
+.TP
+\fBfrcomp.\fIN\fB\fR (uses floating-point)
+
+.SH PINS
+.TP
+.B frcomp.\fIN\fB.in\fR float in \fR
+The input. Usually connected to a pid output
+.TP
+.B frcomp.\fIN\fB.out\fR float out \fR
+The output. Usually fed to a pwm or other drive component
+.SH PARAMETERS
+.TP
+.B frcomp.\fIN\fB.mech-friction-pos\fR float r \fR
+The output required to overcome friction in the positive direction
+.TP
+.B frcomp.\fIN\fB.mech-friction-neg\fR float r \fR
+The output required to overcome friction in the negative direction
+.TP
+.B frcomp.\fIN\fB.motion-tol-pos\fR float r \fR
+The amount of motion command tolerated before motion starts in the positive direction
+.TP
+.B frcomp.\fIN\fB.motion-tol-neg\fR float r \fR
+The amount of motion command tolerated before motion starts in the negative direction
+.SH AUTHOR
+
+K. Cunningham
+.SH LICENSE
+
+GPL

@@ -1,0 +1,128 @@
+/********************************************************************
+* Description:  motor_sim.comp
+*
+* Author: Karl Cunningham
+* License: LGPL Version 3 or later
+*
+* Copyright (c) 2011 All rights reserved.
+*
+********************************************************************
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of version 2 or later of the GNU General
+ * Public License as published by the Free Software Foundation.
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111 USA
+ *
+ * THE AUTHORS OF THIS LIBRARY ACCEPT ABSOLUTELY NO LIABILITY FOR
+ * ANY HARM OR LOSS RESULTING FROM ITS USE.  IT IS _EXTREMELY_ UNWISE
+ * TO RELY ON SOFTWARE ALONE FOR SAFETY.  Any machinery capable of
+ * harming persons must have provisions for completely removing power
+ * from all motors, etc, before persons enter any danger area.  All
+ * machinery must be designed to comply with local and national safety
+ * codes, and the authors of this software can not, and do not, take
+ * any responsibility for such compliance.
+ *
+ * This code was written as part of the EMC HAL project.  For more
+ * information, go to www.linuxcnc.org.
+ *
+*************************************************************************/
+
+component motorsim "Simulates a spindle motor";
+
+description """This component simulates a spindle VFD and motor. It takes a commanded RPM as input and
+computes a motor RPM as output. It accelerates and decelerates at a specified rate in RPM/sec. It also
+takes forward and reverse bit inputs to indicate which direction to go. It does not decelerate through
+zero, but if commanded to reverse direction it decelerates to zero, waits for one second, then accelerates
+in the other direction. Also outputs a motor position command, which is an integrated speed.""";
+
+pin in float commanded-speed "Commanded motor speed in RPM. A unipolar value";
+pin in bit forward "TRUE for forward rotation";
+pin in bit reverse "TRUE for reverse rotation. Both forward and reverse are false when the spindle is stopped.";
+pin in float load=1.0 "Value between 0.9 and 1.0, representing load on the motor. Slows motor down to this value below its desired speed.";
+pin out float output "Motor RPM output. A bipolar value -- positive for CW, negative for CCW";
+pin out float pos "Motor accumulated position in revolutions";
+pin out bit error "Error condition";
+
+pin out float debug1;
+pin out float debug2;
+
+param rw float accel "Allowable acceleration in motor RPM / sec";
+
+variable float prev_speed; // Previous motor speed
+variable float timer; // To time one second
+function _ fp;
+license "GPL";
+;;
+
+FUNCTION(_) {
+    float cmdspeed; // Motor commanded RPM
+	float motorspeed; // Current motor speed
+	bool forwd, rev;
+    float diff;
+	float accelper = accel * fperiod;
+	bool err = FALSE;
+	bool reversing;
+
+	/* If we're waiting for the one-second period while reversing, before starting up again,
+	 *  just increment the timer. Otherwise operate normally. */
+	if(timer > 0) {
+		if(timer > 1.0) {
+			timer = 0;
+		} else {
+			timer += fperiod;
+		}
+		motorspeed = 0;
+	} else {
+		cmdspeed = commanded_speed;
+		/* We only use positive inputs */
+		if(cmdspeed < 0)
+			cmdspeed = -cmdspeed;
+		forwd = forward; rev = reverse;
+		/* If both forward and reverse are on, that's an error */
+		if(forwd && rev) {
+			motorspeed = 0;
+			err = TRUE;
+		} else {
+			if(forwd) {
+				/* If command is CW, but we're going CCW, head toward zero speed */
+				if(prev_speed < 0) {
+					diff = -prev_speed;
+					reversing = TRUE;
+				} else {
+					diff = cmdspeed - prev_speed;
+				}
+			} else if (rev) {
+				/* If command is CCW, but we're going CW, head toward zero speed */
+				if(prev_speed > 0) {
+					diff = -prev_speed;
+					reversing = TRUE;
+				} else {
+					diff = -cmdspeed - prev_speed;
+				}
+			} else {
+				/* Neither forward or reverse. Head toward zero. */
+				diff = -prev_speed;
+			}
+			/* Limit to specified acceleration. */
+			if(diff > accelper)
+				diff = accelper;
+			if(diff < -accelper)
+				diff = -accelper;
+			motorspeed = prev_speed + diff;
+		}
+		/* If we're reversing and have reached zero speed. Start the timer. */
+		if(reversing && (motorspeed == 0))
+			timer = fperiod;
+	}
+	prev_speed = motorspeed;
+	/* Put a load on the motor. */
+	output = motorspeed * load;
+	pos += motorspeed / 60 * fperiod;
+}

@@ -1,0 +1,115 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<pyvcp>
+     <vbox>
+         <relief>RIDGE</relief>         
+         <bd>2</bd>
+                <label>
+                        <text>"Spindle Speed:"</text>
+                        <font>("Helvetica",12)</font>
+                </label>
+                <bar>
+                        <halpin>"spindle-speed"</halpin>
+                        <max_>2400</max_>
+                </bar>
+    </vbox>
+
+    <tabs>
+        <names> ["mpgstatus","jogatc"]</names>
+    </tabs>
+    <tabs>
+        <names>["MPG Status", "Jog ATC"]</names>
+        <vbox>
+            <vbox>
+               <relief>RIDGE</relief>         
+               <bd>2</bd>
+               <label>
+               <text>"MPG Status"</text>
+               <font>("Helvetica",10)</font>
+               </label>
+                <vbox>
+                <hbox>
+                    <label><text>"    X Jog"</text><font>("Helvetica",8)</font></label>
+                    <led>
+                        <halpin>"X-led"</halpin> 
+                        <size>15</size> 
+                        <on_color>"green"</on_color>
+                        <off_color>"red"</off_color>
+                    </led>
+
+                    <label><text>"    Z Jog"</text><font>("Helvetica",8)</font></label>
+                    <led>
+                        <halpin>"Z-led"</halpin> 
+                        <size>15</size> 
+                        <on_color>"green"</on_color>
+                        <off_color>"red"</off_color>
+                    </led>
+                </hbox>
+                </vbox>
+        
+                <vbox>
+                <hbox>
+                    <label><text>"    1.00  "</text><font>("Helvetica",8)</font></label>
+                    <led>
+                         <halpin>"1.00-led"</halpin> 
+                         <size>15</size> 
+                         <on_color>"red"</on_color>
+                         <off_color>"green"</off_color>
+                    </led>
+
+                    <label><text>"     0.10  "</text><font>("Helvetica",8)</font></label>
+                    <led>
+                         <halpin>"0.10-led"</halpin> 
+                         <size>15</size> 
+                         <on_color>"green"</on_color>
+                         <off_color>"red"</off_color>
+                    </led>
+
+                </hbox>
+                </vbox>
+            </vbox>
+        </vbox>
+
+        <vbox>
+    
+            <vbox>
+                 <relief>RIDGE</relief>         
+                 <bd>2</bd>
+                    <label>
+                            <text>"Jog ATC"</text>
+                            <font>("Helvetica",10)</font>
+                    </label>
+                <hbox>        
+                    <label><text>" "</text><font>("Helvetica",10)</font></label> 
+                    <button>
+                        <font>("Helvetica",8)</font>
+                        <width>3</width>
+                        <halpin>"jog-back"</halpin>
+                        <text>"Back"</text>
+                    </button>
+                    <label><text>"  "</text><font>("Helvetica",10)</font></label> 
+                    <button>
+                        <font>("Helvetica",8)</font>
+                        <width>3</width>
+                        <halpin>"jog-forward"</halpin>
+                        <text>"Forward"</text>
+                    </button>
+                    <label><text>"  "</text><font>("Helvetica",10)</font></label> 
+                    <spinbox>
+                        <halpin>"jog-move"</halpin>
+                        <width>4</width>
+                        <min_>0</min_>
+                        <max_>9.99</max_>
+                        <resolution>0.01</resolution>
+                        <format>"2.2f"</format>
+                        <font>("Helvetica",8)</font>
+                    </spinbox>
+                    <label><text>" "</text><font>("Helvetica",10)</font></label> 
+                </hbox>
+            </vbox>        
+        </vbox>
+        
+    </tabs>
+       
+</pyvcp>
+
+

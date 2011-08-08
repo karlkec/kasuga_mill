@@ -1,0 +1,214 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<pyvcp>
+ <vbox>
+ <relief>RIDGE</relief>         
+ <bd>6</bd>
+		<label><width>1</width></label>
+		<labelframe text="Spindle"> 
+			<bd>3</bd>
+			<font>("Helvetica",11)</font>
+			<vbox>
+				<relief>RIDGE</relief>         
+				<bd>2</bd>
+				<hbox>
+					<label>
+						<text>"Gears and RPM Ranges"</text>
+						<font>("Helvetica",11)</font>
+					</label>
+					<button>
+						<halpin>"spindle-help"</halpin>
+						<text>"Help"</text>
+					</button>
+				</hbox>
+				<hbox>
+					<table flexible_rows="[3]" flexible_columns="[3]">
+					<tablerow/>
+						<tablesticky sticky="new"/>
+						<hbox>
+							<label text="1:"/>
+							<number><halpin>"srpm-min-gear1"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+							<label text="-"/>
+							<number><halpin>"srpm-max-gear1"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						</hbox>
+						<hbox>
+							<label text="4:"/>
+							<number><halpin>"srpm-min-gear4"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+							<label text="-"/>
+							<number><halpin>"srpm-max-gear4"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						</hbox>
+						<hbox>
+							<label text="7:"/>
+							<number><halpin>"srpm-min-gear7"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+							<label text="-"/>
+							<number><halpin>"srpm-max-gear7"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						</hbox>
+					<tablerow/>
+						<tablesticky sticky="ew"/>
+						<hbox>
+							<label text="2:"/>
+							<number><halpin>"srpm-min-gear2"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+							<label text="-"/>
+							<number><halpin>"srpm-max-gear2"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						</hbox>
+						<hbox>
+							<label text="5:"/>
+							<number><halpin>"srpm-min-gear5"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+							<label text="-"/>
+							<number><halpin>"srpm-max-gear5"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						</hbox>
+						<hbox>
+							<label text="8:"/>
+							<number><halpin>"srpm-min-gear8"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+							<label text="-"/>
+							<number><halpin>"srpm-max-gear8"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						</hbox>
+						<hbox>
+							<label text="10:"/>
+							<number><halpin>"srpm-min-gear10"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+							<label text="-"/>
+							<number><halpin>"srpm-max-gear10"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						</hbox>
+					<tablerow/>
+						<tablesticky sticky="new"/>
+						<hbox>
+							<label text="3:"/>
+							<number><halpin>"srpm-min-gear3"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+							<label text="-"/>
+							<number><halpin>"srpm-max-gear3"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						</hbox>
+						<hbox>
+							<label text="6:"/>
+							<number><halpin>"srpm-min-gear6"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+							<label text="-"/>
+							<number><halpin>"srpm-max-gear6"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						</hbox>
+						<hbox>
+							<label text="9:"/>
+							<number><halpin>"srpm-min-gear9"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+							<label text="-"/>
+							<number><halpin>"srpm-max-gear9"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						</hbox>
+					</table>
+				</hbox>
+				<hbox>
+					<checkbutton>
+						<halpin>"use-man-gear"</halpin>
+						<text>"Manual Gear Selection"</text>
+					</checkbutton>
+					<label>
+						<text>"Gear Selection: "</text>
+						<font>("Helvetica",10)</font>
+					</label>
+					<spinbox>
+						<halpin>"man-gear-sel"</halpin>
+						<min_>1</min_>
+						<max_>10</max_>
+						<resolution>1.0</resolution>
+						<format>"2.0f"</format>
+						<font>("Helvetica",10)</font>
+					</spinbox>
+				</hbox>
+			</vbox>
+			<vbox>
+				<relief>RIDGE</relief>         
+				<bd>2</bd>
+				<label>
+					<text>"Spindle Speed Control"</text>
+					<font>("Helvetica",11)</font>
+				</label>
+				<hbox>
+					<checkbutton>
+						<halpin>"use-man-speed"</halpin>
+						<text>"Manual Speed Control"</text>
+					</checkbutton>
+					<spinbox>
+						<halpin>"spindle-man-speed"</halpin>
+						<min_>0</min_>
+						<max_>3000</max_>
+						<justify>"center"</justify>
+						<resolution>50</resolution>
+						<format>"5.0f"</format>
+						<font>("Helvetica",10)</font>
+					</spinbox>
+					<button>
+						<halpin>"set-sspeed"</halpin>
+						<text>"Set"</text>
+					</button>
+					<vbox>
+						<label text="Out of Range" anchor="center"/>
+						<led halpin="sspeed-error" size="11" on_color="red" off_color="grey" anchor="center"/>
+					</vbox>
+					<button>
+						<halpin>"spindle-stop"</halpin>
+						<text>"Stop"</text>
+					</button>
+				</hbox>
+			</vbox>
+			<vbox>
+				<hbox>
+					<relief>RIDGE</relief>         
+					<bd>2</bd>
+					<label>
+						<text>"Speed (RPM):"</text>
+						<font>("Helvetica",11)</font>
+					</label>
+					<label><width>2</width></label>
+					<vbox>
+						<label>
+							<text>"Comanded"</text>
+							<font>("Helvetica",10)</font>
+						</label>
+						<number>
+							<halpin>"commanded-rpm"</halpin>
+							<font>("Helvetica",10)</font>
+							<format>".0f"</format>
+						</number>
+					</vbox>
+					<label><width>2</width></label>
+					<vbox>
+						<label>
+							<text>"Actual"</text>
+							<font>("Helvetica",10)</font>
+						</label>
+						<number>
+							<halpin>"spindle-rpm"</halpin>
+							<font>("Helvetica",10)</font>
+							<format>".0f"</format>
+						</number>
+					</vbox>
+					<label><width>1</width></label>
+					<vbox>
+						<label text="Motor Speed Limited"/>
+						<led halpin="motor-limited" on_color="red" off_color="grey" size="11"/>
+					</vbox>
+				</hbox>
+				<hbox>
+					<label><width>1</width></label>
+					<relief>RIDGE</relief>         
+					<bd>2</bd>
+					<label>
+						<width>10</width>
+						<text>"Drive Fault:"</text>
+						<font>("Helvetica",11)</font>
+					</label>
+					<label><width>1</width></label>
+					<led> 
+							<halpin>"vfd-fault"</halpin>  
+							<size>20</size>  
+							<on_color>"red"</on_color> 
+							<off_color>"grey"</off_color> 
+					</led>	
+					<label><width>3</width></label>
+						<button>
+							<halpin>"vfd-reset"</halpin>
+							<text>" RESET "</text> 
+							<width>6</width>
+							<font>("Helvetica",10)</font>
+						</button>
+					<label><width>5</width></label>
+				</hbox>
+			</vbox>
+		</labelframe>
+ </vbox>
+ 
+</pyvcp>

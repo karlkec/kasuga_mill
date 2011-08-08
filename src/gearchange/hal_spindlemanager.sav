@@ -1,0 +1,739 @@
+#!/usr/bin/python
+""" This is a program to prompt the user to change the gear settings.
+        Copyright (C) 2011 Karl Cunningham
+
+        This program is free software; you can redistribute it and/or modify it
+        under the terms of the GNU General Public License as published by the Free
+        Software Foundation; either version 3 of the License, or any later version.
+
+        This program is distributed in the hope that it will be useful, but WITHOUT
+        ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+        FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+        You should have received a copy of the GNU General Public License along
+        with this program; if not, see <http://www.gnu.org/licenses/>.
+"""
+""" Does spindle management. This is a user-space program to handle spindle speed and gear changes.
+	Handles automatic as well as manual gear selectrion, and manual or program-controlled
+	spindle speed.
+
+	One command-line argument is required -- the number of gears used on this
+    machine. Normally comes from an INI file entry
+
+	A. Manual speed setting is used when use-man-speed is TRUE. Otherwise,
+	spindle speed is determined from pin sspeed-in
+
+	B. Manual gear-setting mode is determined by the state of the use-man-gear
+	input pin. Otherwise, the needed gear is calculated.
+
+    C. In automatic spindle-speed mode, monitors for spindle-speed changes. A
+    speed change is determined when the ratio of motion.spindle-speed-out to
+    halui.spindle-override.value is stable for two or more consecutive cycles,
+    but is different by more than 0.1% from the previous ratio. This allows
+    changes to the spindle override to be made without changing gears (but may
+    be subject to motor speed limits downstream of this component). If the ratio
+    is stable but has changed by more than 0.1% from the previous stable value,
+    the new speed is evaluated for a possible gear change.
+
+	D. In manual spindle-speed mode, a new speed is accepted when the
+	mspeed-set input is TRUE and mspeed-in is different than the last time
+	mspeed-set was TRUE.
+
+	E. When a new spindle speed is seen, a determination is made whether it can
+	be accommodated with the current gear setting (keeping the motor between min
+	and max). If so, no gear change is called for and the motor speed is adjusted
+	to meet the newly-requested spindle speed.
+
+	F. If the new spindle speed cannot be accommodated and the gear setting is
+	in manual mode, a dialog advises the user of such and asks if they want to
+	change gears. The dialog also indicates what the nearest speed is that can be
+	made using the same gear, keeping the limits of motor speed.
+
+	G. If the operator wants to change gears, the spindle is stopped and
+	the gear change dialog for the needed gear is presented. The spindle is then
+	started with the new motor speed.
+
+	H. If the answer is NO (keep the old gear), the motor speed is changed to
+	the limit that produces a spindle speed closest to what is needed and the
+	mspeed-limit output is set TRUE.
+
+    I. If in automatic gear-selection mode, the determination of whether a gear
+    change is necessary is done by evaluating the new spindle speed request
+    against motor speed ranges and gear ratios. If the new spindle speed is
+    zero, no gear change is performed.
+
+    J. If the spindle speed request is out of range of the machine in any gear,
+    a dialog is presented asking the user whether to use the closest avaiable
+    machine speed. If the user agrees, operation continues that way. If not,
+    halts the gcode program.
+"""
+	
+# Images embedded here. Code follows images
+
+belt1_b64 = \
+"""R0lGODlhBAFvAPAAAAAA/wD//yH5BAEAAEwALAAAAAAEAW8AxwAAAAwMDBMTExsbGyIiIiwsLDMz
+Mzg4OFQBAVkGBl0KCmANDWYTE2kWFmwZGXAdHXQhIX0qKkVFRUlJSVRUVFpaWmJiYmlpaXNzc3x8
+fIYzM4g1NZI/P6YaAakbA7UaAbweBqcmD60gB7YhBbEkC7gjB7slCZpHR51KSqJPT6lWVqtYWMAe
+AsMiBsopDcsuFc4yGdQiAtknBdAuE9Q2GtE7H9M5Ic9CKd1HK99SOeJTOOdgR4WFhYiIiJKSkpqa
+mqCgoKurq7Ozs7u7u8LCwsvLy9LS0tzc3OLi4u3t7fPz8/7+/vwD+wAAAP///wAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAj/AJkIHEiwoMGDCBMqXMiwocOHECNKnEixosWLGDNq3Mixo8ePIBkCGEkhpMmTKFOq
+RDgSQIWPLS+g3EFjhc0VDhI42MmzJ08FDG4KHUq0qNGjSJPiVOCzqdOnUKNKnUr1Z9CbNnQQbPnS
+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
+aQsAAAA7
+"""
+belt2_b64 = \
+"""R0lGODlhBAFvAPAAAAAA/wD//yH5BAEAAFAALAAAAAAEAW8AxwAAAAwMDBMTExwcHCIiIiwsLDMz
+Mzg4OFQBAVgFBVwJCWEODmYTE2gVFWwZGXEeHnUiInwpKUVFRUlJSVRUVFpaWmJiYmlpaXR0dHt7
+e4YzM4g1NYs4OKUZAakbA7MbAbweBq4hCLUhBbEkC7UoD7gjB7olCbYpEJRBQZpHR5tISKBNTadU
+VKhVVatYWMAeAsIgBMAjC8wrD84sEM4xGNMhAdkoBtAvE9I9Idg/I91JLd5LMN5ROd5bQ+dgR4WF
+hYmCgoiIiJOTk5qamqCgoKurq7Ozs7y8vMLCwsvLy9LS0tzc3OLi4u3t7fT09P7+/vwD+wAAAP//
+/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAj/AKEIHEiwoMGDCBMqXMiwocOHECNKnEixosWLGDNq3Mixo8ePIBkCGEkhpMmTKFOq
+RDgSQIWPLS+sHChBwISbOHPiFHBgJsYJNnUKHUq0qNGjSJPe5Kmw5UuPMT36yOGi6oYEChpo3cq1
+q1cGWxckgNCiqtmzaNOqXcu2bVsNCBQ4aDC3Lt27dvPi3au3L9+/fueKZaCiKo0dDZ3CHCkTowEA
+Bi4YOEC5suXLmDNrxnwTwACfGQUAmLC5tOnTlKEUANBzo2KojBdeACAA9McBo21DJMD6I28JJ193
+jAqFtgSdBgYoXc68edLjBwgIxW1AN0ECx2+uDnDAOc7t2ScU/ygZUjhH4iMHTJ6Mur379/BP885t
+/WCGkQTiTy4QAPJM8xsZIEFLBBZo4IEIJqjgggw26KCCqz0o4YQUVmhhgQUYkEF9HHbo4YcgOkRb
+iB8C0BiJKFoHQAApcmhiizD6tGKMur1I44045qjjjh9lQMGPQAYp5JBEFmnkkUgmqeSSTDbp5JNQ
+RrkkBuXFhlIB+cVnGX8oCqCelmCGKaZpBLBIEIAaEYfSgARQJJoFKeI2AY8ZWTBiQWhmpOZGU7mQ
+wgIIMBABYHg5YOihdRlK1wMoANrACm5FKumkbUWQQAIRUKrpppxWxYECCDzQwmGJjfTUcFaGppx3
+rOI0YHV0Qv/xmAGt1jpAbai6tJiNDvE35q9aqherr78W0FpKeWK0J02wxvqQBMfiCG1DpKlo6q4n
+Oqvttgsly+234IZ70IzippltueGSi+5FvK4L7p3uVtRuvPTWa++9+Oar77789uvvvzFieeHABBds
+8MEIJ5ywAJFhC/DDJnlr0bIm2YnrQ6s1m2IGAQRAZb5vjnstbPOmNMCXpp0MZ45eAuvyy5gNYCZL
+I+d6bkY+1ADCByCAUELPP5vQs9AgmBDD0EcXnTQMMPTs9M480yD11FRXbfXVWGc9ddJP+wz10EiH
+rbTYRpOddNljp4322me3bfbTH9RgwlCnCiSxvKnySZVZc5X/1elZc/0t+OCAJ+DV4YgnrvjijG+V
+wAJnkSpSzeflLRF/xl7WgQcijOD556CHLvroo3vguQmge+CBDjvw0PrrrscO++yy1047D677gHvr
+uPPgwQckjHCC8CcUP7zqJpxAgvHMN+/889BH//wIqjcv/AioeyAi5a5ZbtEEGq9Urbbg2zZ+5bqS
+fHNBZPbHMMxg8rcie5p9XF9/AWRemQH0w5/ZeqIBQJq4N8CSJQQDJ6uVAltVgM/Q6VYLBJ8DkUVA
+PXnvILipG50eUwAc9WdlGxHN+nKlwQKeizf9858KwTSgi8WIg+2xQH9GGJwKKst7HetOBHfIQ53w
+poQpogAA/6TznN7Y5m4UoRjElnjD9OWKAFKKohSnGKULUPGKWMwikAZkQyZ68YtgDGOO1OVFO9FQ
+jEec2RcNiMYaqdGLbGwjaOC1xjPKcSVkhKMd74isNzIxjnxUiRAVdqEIEbJC0QqkIhfJyEY68pGQ
+jKQkJ0nJSlrykphUZAAec8hOevKToAzlwB4DElGa8pSoTKUngdjEPWYSX0iciBJfya9YSmSWHeFk
+AbxzAPehiJNE7KEwhyke/OCpixO7YMWGiJoyJRJG9yFACldIzWYCAIQGsWVEcBmSaTHkfNJ65rrA
+mU1k4g2QHmETBZQChZDF6DcVIKY8a1UBOp7JnElU5kVGIP8CE/jTBB/4QD//SdCCGvQEySuBQP8p
+gg/gQAcQjahEJ0rRilr0ohBdqAlKQFCNGvSjIA2pSEdKUpJ+IEv7E80xnYg+V0ZkKi24Sqj8RjgX
+yJQsNK2pTtWigQQgYFANYABYgjpUoWrFqEQ9alGXqtSmJvWpSI0qU4naKAQsQAWS6xY+ZanPivSJ
+b3JBFKIKxZdD0cVwOd2pWtkSuLW6dS0PaEDkEDM5lnYPnRP5qgtWgJXGIW6oDXAUpN5K2KpEwKpl
+FatiF8vYxjr2sYpagAJEZRi6atWuJpSKDZoGAxnc4LOgDa1oR0vaz8qAaTD4LA1ukIMb0KC1sGWt
+bGNL29n/2ra2tX3tal+r2hswDQSoDa5wh0vc4hr3uMhFLnBroINSYdaCeFXID/CnQ1fN8ybhwa5o
+AjCnG4mGlT5ZjTi5+txWbiSB19VJdgrgQjoJIJjp9eEE7wreZEbXIRIYQDU3w7Bt9XK/mpkMyep7
+TpcuRE71mdWOFGydCXgGfQTOJyCFuEuiEEAAEshufI9yAAwTxQD96RBPhPIYDGuYhyDmrnoFgM1z
+Rpi8rpxNACoAYBVWAME5ypjLMvAbCpaXXV01iDd3VD46DdkiR67hj+1rYJnRasPCBEAHdyQA7kTw
+APdt4otvaSX+YWY+75tmjYG1HvyJ2UPpWY+Xx8Qe3ACA/Dyl3CqXedXjfVkMRgyOyAdlJOdtXpAA
+AzgxlActLB1dOClYstaSC3wQYo350ZeR5o6cKZ/w/afPENlTxwwMru/CSIjz7ZURL71oCTcGO4NO
+9XIaRqIKs+o4BthyAWWd6SDT8l7arHWWb+2uXD9ElcBWmCGDTewL0fpZWC62sik07GU7W0EGaC+v
+p03talv72irh4rO33SZsJ9GPS9y1twdizz9yetx2AzfExI3uPJob3duUdrjP3W51P4zd43b3vOGd
+aXmvm975tjfA8O1tff+b37/2970BXvAhEuDhEI+4xCdO8YpbPOLRubjGN85xiOOG4QgPuchHjqKA
+AAAh/wtTVEFSRElWIDUuMAkByhoAAGkLAAAAOw==
+"""
+belt3_b64 = \
+"""R0lGODlhBAFvAPAAAAAA/wD//yH5BAEAAE8ALAAAAAAEAW8AxwAAAA0NDRMTExwcHCUdHSIiIiws
+LDknJzMzMzg4OFMAAFkGBlwJCWIPD2YTE2gVFWwZGXglJUVFRUlJSVRUVFpaWmJiYmlpaXR0dHt7
+e4UyMoo3N406OpA9PaQaAqgdBbUbAbweBbMgBbAmDbIoD7ohBr0lCbQqEboyGZpHR51KSqRRUaxZ
+WcEfA8IgBMclCcUoD8wsEsMxGc4xGNUjAtkqC9EvFNEwFNc+I9tDJ9lELNtKMt9VPOJWPeJaQoWF
+hYiIiJOTk5qamqCgoKurq7S0tLu7u8LCwsvLy9LS0tzc3OLi4u3t7fT09P7+/vwD+wAAAP///wAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAj/AJ8IHEiwoMGDCBMqXMiwocOHECNKnEixosWLGDNq3Mixo8ePIBkCGEkhpMmTKFOq
+RDgSQIWPLS+sHChBwISbOHPiFJBgJsYJNnUKHUq0qNGjSJPe5Kmw5UuPMVEGGJCgqtWrWLNeLSDA
+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
+"""
+belt4_b64 = \
+"""R0lGODlhBAFvAPAAAAAA/wD//yH5BAEAAFgALAAAAAAEAW8AxwAAAA0NDRMTExsbGyIiIiwsLDMz
+Mzg4OFQBAVgFBVwJCWANDWYTE2kWFmwZGXIfH3YjI3kmJn8sLEVFRUlJSVRUVFpaWmJiYmlpaXR0
+dHt7e5EYAZ4ZAYIvL4UyMoo3N488PKAbAq0cAbEcA70cAKUgB6YhCa8gBKskC64pEbUkCbgjC7go
+DLIsFLktErUwF5VCQplGRp5LS6FOTqRRUalWVqtYWMAeAsIgBMUkCM8gAcknC8spDcU2GtMiAdEv
+FNEwFNM/J9ZCKdlELN1NMdxSOuJTOOZhSYWFhYiIiJOTk5mZmaCgoKurq7Ozs7u7u8PDw8vLy9LS
+0tzc3OLi4u3t7fT09P7+/vwD+wAAAP///wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAj/ALEIHEiwoMGDCBMqXMiwocOHECNKnEixosWLGDNq3Mixo8ePIBkCGFkhpMmTKFOq
+RDgSgIWPLTGsHDhBAIWbOHPiFHBgJkYKNnUKHUq0qNGjSJPe5Kmw5UuPMVEKGHCgqtWrWLNeJSDg
+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
+"""
+belt5_b64 = \
+"""R0lGODlhBAFvAPAAAAAA/wD//yH5BAEAAFMALAAAAAAEAW8AxwAAAAwMDBMTExwcHCIiIiwsLDMz
+Mzg4OFQBAVgFBV0KCmANDWYTE2kWFmsYGHEeHnUiInglJUVFRUlJSVRUVFpaWmJiYmlpaXR0dHx8
+fIIvL4QxMYg1NYs4OKwbAbEdBL4cAKskDK8uFrIgBbUkCrcoDLgkC7goDLMsE7ssELs0G5VCQppH
+R51KSqBNTaVSUqhVVatYWMAfA8IgBMclCc4gAcsqDso7H9MiANEvFNEwFMU8I8k+JtA8JNFCJthF
+LNBJMONTOORdRIWFhYiIiJOTk5ubm6CgoKurq7Ozs7u7u8LCwsvLy9LS0tzc3OLi4u3t7fT09P7+
+/vwD+wAAAP///wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAj/AKcIHEiwoMGDCBMqXMiwocOHECNKnEixosWLGDNq3Mixo8ePIBkCGEkhpMmTKFOq
+RDgSQIWPLS+sHChBwISbOHPiFHBgJsYJNnUKHUq0qNGjSJPe5Kmw5UuPMVEGGHCgqtWrWLNeJSDA
+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
+"""
+gearL_b64 = \
+"""R0lGODlhBAFTAPAAAAAA/wD//yH5BAEAADYALAAAAAAEAVMAxwAAAAwDAwsLCxEBARoBARwLCxMT
+ExwVFRoaGiQAACYPDyoAADUAADwAACMjIyggICwsLDEnJzMoKDQ0NDs7O0IAAEsAAFIAAFsAAGIA
+AGwAAHQAAH0AAENDQ0tLS1NTU1tbW2RkZGtra3V1dXt7e4AAAIODg4uLi5OTk5ubm6Ojo6ysrLOz
+s7y8vMPDw8rKytTU1Nvb2+Tk5Ozs7PPz8/7+/vwD+wAAAP///wAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAj/AG0IHEiwoMGDCBMqXMiwocOHECNKnEixosWLGDNq3Mixo8ePIEOKHEmypMmTKFOO
+NAAAgUADBmEWZOlSpc2bOHMuFOBAIUsAQIO2HOiAhI0UAxHU1Mm0qdOOLBEiEEqVqgCEACA83cq1
+a0QAMhd6GGsUoQAAXtOqXQtRxAcPFBw4gNCBrd27eB2CADqAAIADAEbkHUzYqwgFGEooXsy4RAK0
+hSNLnky5suXLmDNr3sy5s+fPoBtGRVhWYOmDI4aGXs3WAWSDFKrKBlBX4IgPEAy4nsC6d1fVB/fO
+BiAi4VnfyNN2AHAVoYqxHgiSAAoiufXK0FFc3z45AoHGjTEA/6DAvTxbBAUSaGDMwQJz8/Djy59P
+v779+/jz69/Pv7/Ys8w5QMFbBkwFFAIf+KegRBM0RxB5BNV2kABaLWhhQe8lBKENEh5UlA1gXbhg
+CK8ZZOBwIRZ0gg3TiejfBB0SBAGKQlUIG28u7udBiRjSCJRBHygFQAg59gcAjgp54IAACNiIkGtF
+LkiBANUpJAJ0B30gQHRR5rjjjEgKRMEEDkw1AQBVdqlmQilgueabC73lQZpw1mlDbBZwoBgHemqw
+AABc2pljbOuBx1gDDwhaJAAJbGBoCe2hqWiXIyz3VwS0Tarpppx26umnoIYq6qiklmrqqaimquqq
+rLbqKkkkTP8JFIDMxfhqch8ARaZBNoawo6S3sgZUcQIRWVBPBu3lYLCc/WhQT9oVq1CGzGImArAH
+LXXaQSEcV61lqW1bkAdnAbjUQCLYuNe3lWWK0JnDTQCCk0fZcCa7ksVmnI/LYhgovnl5a5CPNX4g
+GEHAAYxXigMT7KxASAlErcJ33XuQCCcOh2CsBnRQ2ngUD0YcQtfSKK5AO4Y8GFwKkSAArbMu1AGd
+Kts1o0PZTWtrzWyRSG+WY9GcFAAn82zXjsgidIKbBE0ltNGDpZYwQdCp8NLEUFsWQsYwt0Rs1quR
+wDTYrI1NdmjQFX32Zh+UieDanwEwwAAVZKABBg0EAECCcF9G5poFj24wQNJ9S0biBY8upnfhk3lQ
+wAZ6PspBAxIwLtl0FURuKAd+WW44AAtozlgGnXs+WWwBJNBABQwAoACPpscuu3wBAQAh/wtTVEFS
+RElWIDUuMAkByhoAAG8IAAAAOw==
+"""
+gearH_b64 = \
+"""R0lGODlhBAFTAPAAAAAA/wD//yH5BAEAADYALAAAAAAEAVMAxwAAAAoBAQsLCxYAABsAABMTEx0Q
+EBsaGiEAACQODiwAACYYGC4cHDMAACMjIywnJywrKzEoKDQ0NDgyMjw8PEEAAEkAAFIAAF8AAGEA
+AGwAAHIAAHwAAENDQ0tLS1JSUltbW2RkZGtra3R0dHt7e4AAAIODg4qKipOTk5ubm6Ojo6urq7Oz
+s7u7u8TExMvLy9TU1Nzc3OPj4+zs7PPz8/7+/vwD+wAAAP///wAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAj/AG0IHEiwoMGDCBMqXMiwocOHECNKnEixosWLGDNq3Mixo8ePIEOKHEmypMmTKFOO
+LADggMACBmEWZOlSpc2bOD9+AGChhM+fQDMk6KBQgAOFLAEoXdpyoAMSNlIMPFAzp9WrWBV6ABCg
+ggYOHDRY4OphIUuEB5iqVSsAIYCjWePKnUsRgEyMAgDQ3cu3L0URHzxQACHCr+HDiBMrXsy4sePH
+kCNLnky5suXLmDNr3sy580YIABIEQNAgAIAIcBueRQh1YGvWTT3LFpl2A9DbJTgo9cC7d++8vn0n
+XbuWqMARHyAUcABAwuzndGMfBEF8aWGEeaFr59sBQFuIJJSC/9hOvrz58+jTq1/Pvr379/Djy59P
+v779+/jzU/SQV6kDCoEVkJZSB3yg34EOSfAdQRQUZNxBBUCAYHkUAKAAB7hx0IAAEi7knUINCvTg
+QU/ZYNeEz0GAQG64AYVAAB148EEII5wglQ07JTRgdUotONAJNoSH4mxc2dYiBwGkZlAKBzggAgiB
+9dZBfzwu1aFBFDg35HMjUNCBBBKM4NBWCVXJlEEfUAXAeFvW1xxDHoBZ1kLMtZkfBQKwSRF1BtqJ
+4lagaVkQCYGu6eehiCaq6KKMNuroo5BGKumklFZq6aWYZqrpppx26umnoIYq6qiklmpqpyTg2eNS
+Aox4KnQ7Nf+npEBXhrCVoa92ptR1NoRg0KwCUadXrnNtJcADb0akFIk2oDCQr2X6SOxNEBhAAAYY
+gpUBAQBcqZAIuB5U1WsIhZDdtDdNMABYGZaAwLAJjQAAuQbx5x2BBolwJXXoqpQWhi3mhiS8BwHg
+KkESVCkBCN5GZUPC/aLEVcBAKVBAjMHxxhKAIIxgAgoqBEklj9ISBMCcEZM0AgM9BczBBd2S8GTG
+u2V8q5lWfiCmyVWlPFIICxBgJFAaKABAn27dRZAKOJ850I0mluxzSCJUCMCLACwQbkIQHyTCjjwW
+mOrFrxk8NWIA8FoQuGbSOxCZZx8mmEIkCDByAVIT1IGecftBBRpHZveNWAjdYpSW24L7tRWwDqXF
+d+KKySudWR9CPlkIYI/cktqWd+7556CHLvropJdu+umop6766qy37npnAQEAIf8LU1RBUkRJViA1
+LjAJAcoaAABvCAAAADs=
+"""
+
+import sys, os
+import gettext
+import subprocess
+import emc, hal
+import os.path
+
+
+# Global Variables. See below
+photo1 = ''
+photo2 = ''
+
+EXIT_OK = 0
+EXIT_ERROR = 255
+answer = EXIT_OK
+
+BASE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), ".."))
+gettext.install("emc2", localedir=os.path.join(BASE, "share", "locale"), unicode=True)
+
+def notify_prep(master,gear_no,msg):
+	# Need to prevent garbage collection
+	global photo1,photo2
+
+	# Handle clicking the X in the corner
+	master.protocol("WM_DELETE_WINDOW", lambda: abort(master))
+
+	# Decode the ratio into belt and gear values. These have become less straightforward
+	#  so we play some arithmetic games here
+	belt = 4 - ((gear_no - 1) % 5)
+	gear = (gear_no - 1) // 5
+
+	if(belt == 0):
+		# Highest Speed of the belt positions
+		beltimg = belt1_b64
+		belttxt = "Change the Belt to the TOP Position"
+	elif(belt == 1):
+		beltimg = belt2_b64
+		belttxt = "Change the Belt to the SECOND Position"
+	elif(belt == 2):
+		beltimg = belt3_b64
+		belttxt = "Change the Belt to the MIDDLE Position"
+	elif(belt == 3):
+		beltimg = belt4_b64
+		belttxt = "Change the Belt to the FOURTH Position"
+	else: # belt == 4
+		# Lowest Speed of the belt positions
+		beltimg = belt5_b64
+		belttxt = "Change the Belt to the BOTTOM Position"
+
+	if(gear == 0):
+		gearimg = beltL_b64
+		geartxt = "Set the Gear Lever to LOW"
+	else:
+		gearimg = beltH_b64
+		geartxt = "Set the Gear Lever to HIGH"
+
+	# Or use msg if given
+	if(len(msg)):
+		dialog = msg
+	else:
+		dialog = belttxt+"\n"+"and "+geartxt+"\n"
+
+	frame1 = Tkinter.Frame(master)
+	frame1.pack()
+
+	beltpic = Tkinter.PhotoImage(data=beltimg)
+	picture1 = Tkinter.Label(frame1, image=beltpic)
+	picture1.pack()
+
+	gearpic = Tkinter.PhotoImage(data=gearimg)
+	picture2 = Tkinter.Label(frame1, image=gearpic)
+	picture2.pack()
+
+	msg1 = Tkinter.Label(frame1,text=dialog,fg="red")
+	msg1.pack()
+
+	finaltext = "Click PROCEED when Done or ABORT to Stop"
+	msg2 = Tkinter.Label(frame1,text=finaltext)
+	msg2.pack()
+
+	frame2 = Tkinter.Frame(frame1)
+	frame2.pack(pady=10)
+
+	abort_button = Tkinter.Button(frame2,text="ABORT",command=lambda: abort(frame1))
+	abort_button.pack(side=Tkinter.LEFT)
+	abort_button.bind("<Return>",abort)
+	abort_button.bind("<Escape>",abort)
+
+	cont_button = Tkinter.Button(frame2,text="PROCEED",command=lambda: ok(frame1))
+	cont_button.pack(side=Tkinter.LEFT)
+	cont_button.bind("<Return>",ok)
+	cont_button.bind("<Escape>",abort)
+
+	# Center the window 
+	w = 300
+	h = 330
+	sw = master.winfo_screenwidth()
+	sh = master.winfo_screenheight()
+	master.geometry("%dx%d+%d+%d" % (w,h,(sw-w)/2,(sh-h)/2))
+
+
+	# Save to global variables to prevent the pictures from being garbage collected
+	photo1 = beltpic
+	photo2 = gearpic
+
+def abort(fr):
+	global answer
+	answer = EXIT_ERROR
+	fr.quit()
+
+def ok(fr):
+	global answer
+	answer = EXIT_OK
+	fr.quit()
+
+############### Main Program #################
+# First argument is the number of gears used
+if(len(sys.argv) < 2):
+	sys.stderr.write("%s must be called with the number of gears as the first argument\n" % sys.argv[0])
+	sys.exit(EXIT_ERROR)
+
+try:
+	ngears = int(sys.argv[1])
+except:
+    sys.stderr.write("Invalid Number of Gears argument (%s) passed to %s. Must be between 1 and 15\n"%(sys.argv[1],sys.argv[0]))
+    sys.exit(EXIT_ERROR)
+
+h = hal.component("hal_spindlemanager")
+h.newpin("sspeed-in", hal.HAL_FLOAT, hal.HAL_IN) # desired spindle speed in RPM from motion
+h.newpin("mspeed-in", hal.HAL_FLOAT, hal.HAL_IN) # manual spindle speed in RPM from operator via pyvcp
+h.newpin("use-man-speed", hal.HAL_BIT, hal.HAL_IN) # use operator spindle speed (vs from axis), from pyvcp
+h.newpin("mspeed-set", hal.HAL_BIT, hal.HAL_IN) # set mspeed-in as the new requested speed
+h.newpin("use-man-gear", hal.HAL_BIT, hal.HAL_IN) # use operator-selected gear, from pyvcp
+h.newpin("gear-no", hal.HAL_S32, hal.HAL_IN) # operator specified gear number (1-10), from pyvcp
+h.newpin("enable-in", hal.HAL_BIT, hal.HAL_IN) # spindle enable from motion
+h.newpin("is-stopped", hal.HAL_BIT, hal.HAL_IN) # stopped indication from spindlemotor.comp
+h.newpin("override-in", hal.HAL_FLOAT, hal.HAL_IN) # spindle speed override, from halui
+h.newpin("help-request", hal.HAL_BIT, hal.HAL_IN) # User has requested the help dialog
+
+h.newpin("gear-no-out", hal.HAL_S32, hal.HAL_OUT) # gear number in use, to pyvcp
+h.newpin("gear-ratio-out", hal.HAL_FLOAT, hal.HAL_OUT) # ratio of gear in use, to spindlemotor.comp
+h.newpin("motor-speed-out", hal.HAL_FLOAT, hal.HAL_OUT) # Motor speed in RPM (pos == CW, neg == CCW) to spindlemotor.comp
+h.newpin("enable-out", hal.HAL_BIT, hal.HAL_OUT) # spindle enable output to spindlemotor.comp
+h.newpin("sspeed-error", hal.HAL_BIT, hal.HAL_OUT) # spindle speed error?
+h.newpin("mspeed-limit", hal.HAL_BIT, hal.HAL_OUT) # motor speed is being limited
+
+# Set up gear ratios
+for gearno in range(ngears):
+	h.newparam("ratio-gear%d"%(gearno+1),hal.HAL_FLOAT, hal.HAL_RW)
+h.newparam("motor-max",hal.HAL_FLOAT,hal.HAL_RW) # Motor maximum speed
+h.newparam("motor-min",hal.HAL_FLOAT,hal.HAL_RW) # Motor minimum speed
+h.newparam("motor-nom",hal.HAL_FLOAT,hal.HAL_RW) # Motor nominal speed
+h.ready()
+
+# Set the gear ratios to 1.0
+for gearno in range(ngears):
+    h["ratio-gear%d"% (gearno+1)] = 1.0
+
+import Tkinter, nf, rs274.options
+app = Tkinter.Tk(className="AxisSpindleManager")
+sw = app.winfo_screenwidth()
+sh = app.winfo_screenheight()
+app.wm_geometry("-60-60")
+app.wm_title(_("AXIS Spindle Manager"))
+rs274.options.install(app)
+nf.start(app); nf.makecommand(app, "_", _)
+app.wm_protocol("WM_DELETE_WINDOW", app.wm_withdraw)
+lab = Tkinter.Message(app, aspect=500, text = _("\
+This window is part of the AXIS spindle manager.  It is safe to close \
+or iconify this window, or it will close automatically after ten seconds."))
+lab.pack()
+
+def withdraw():
+    app.wm_withdraw()
+    app.bind("<Expose>", lambda event: app.wm_withdraw())
+
+app.after(10 * 1000, withdraw)
+
+# States
+RUNNING = 0
+GEAR_CHANGE = 1
+OPERATOR_WAIT = 2
+
+# Speed change tolerance
+RATIO_TOL_UPPER = 1.001
+RATIO_TOL_LOWER = 0.999
+
+# Build an erray of gear ratios from the hal parameters
+gear_ratios = []
+for gearno in (range(ngears)):
+	gear_ratios.append(h["ratio-gear%d"%(gearno+1)])
+
+# Initialization
+sspeed = 0.0
+override = 0.0
+prev_stable_speed = 0.0
+sratio = 0.0
+prev_ratio = 0.0
+prev_stable_ratio = 0.0
+speed_change = False
+prev_state = -1
+state = 0
+cur_gear = -1 # No gear
+cur_gear_ratio = 0.0
+ratio_upper_limit = 0.0 # Guaranteed to trip the speed change first time through.
+ratio_lower_limit = 0.0
+motor_speed_out = 0.0
+motor_limited = False
+sspeed_error = False
+
+# When this program starts, it is assumed the spindle is stopped and we don't
+#  know what gear we're in.
+try:
+    while 1:
+        state_change = (prev_state == state)
+        prev_speed = sspeed
+        sspeed = h["sspeed-in"]
+        enabled = h["enable-in"]
+        stopped = h["is-stopped"]
+        prev_override = override
+        override = h["override-in"]
+        if(state == RUNNING): # Check for speed changes.
+            if(h["use-man-speed"]):
+                if(h["mspeed-set"]):
+                    man_speed = h["mspeed-in"]
+                    if(man_speed == 0.0):
+                        h["motor-speed-out"] = 0.0
+                    else:
+                        if(man_speed != prev_stable_speed): # avoid multiple detections
+                            # Set current and previous speeds so we start fresh
+                            #  with this speed.
+                            speed_change = True
+                            new_speed = man_speed
+                            prev_stable_speed = man_speed
+            else: # Automatic speed change detection.
+                if(not enabled or new_speed == 0.0):
+                    # Zero speed doesn't require gear selection
+                    motor_speed_out = 0.0
+                else: # Not zero speed, check for speed change
+                    if(sspeed == prev_speed and prev_speed != prev_stable_speed):
+                        prev_ratio = sratio
+                        if(override == 0.0): # Trap divide by zero
+                            sratio = 0.0
+                        else:
+                            sratio = sspeed / override
+                        if(prev_ratio == sratio and (sratio > ratio_upper_limit or sratio < ratio_lower_limit)):
+                            # New speed change not due to spindle override
+                            new_speed = sspeed
+                            prev_stable_speed = new_speed
+                            speed_change = True
+                            # Set new limits for testing
+                            ratio_upper_limit = sratio * RATIO_TOL_UPPER
+                            ratio_lower_limit = sratio * RATIO_TOL_LOWER
+                        else:
+                            # Speed has changed due to override.
+                            motor_speed_out = sspeed * cur_gear_ratio
+                            motor_limited = False
+                            if(motor_speed_out > h["motor-max"]):
+                                motor_speed_out = cur_gear_ratio * h["motor-max"]
+                                motor_limited = True
+                            if(motor_speed_out < h["motor-min"]):
+                                motor_speed_out = cur_gear_ratio * h["motor-min"]
+                                motor_limited = True
+
+            if(speed_change):
+                speed_change = False
+                # Evaluate for possible gear change. If gear has not been set, it must be done now.
+                # Check the new desired spindle speed to see if it can be accommodated with
+                #  the current gear. If so, use it and set the new motor speed
+                new_motorspeed = new_speed * cur_gear_ratio
+                if(new_motorspeed >= h["motor-min"] and new_motorspeed <= h["motor-max"] and cur_gear >= 0):
+                    motor_speed_out = new_motorspeed
+                else:
+                    state = GEAR_CHANGE
+
+        elif(state == GEAR_CHANGE):
+            if(state_changed):
+                # Stop the spindle to change gears
+                motor_speed_out = 0.0
+
+                # Find optimum gear. Check motor speed for each gear and find the one closest to MOTOR_NOM
+                # This result in cur_gear being the new gear.
+                speedratio = 1e9  # very large number
+                for gearno in range(ngears):
+                    if(h["motor-nom"] == 0.0): # Trap divide by zero
+                        trialratio = 1.0
+                    else:
+                        trialratio = (new_speed * gear_ratios[gearno]) / h["motor-nom"]
+                    if(trialratio < 1):
+                        trialratio = 1 / trialratio
+                    if(trialratio < speedratio):
+                        speedratio = trialratio
+                        new_gear = gearno
+                # We've found the gear with the ratio closest to running the motor at nominal speed.
+                # Check that it's within the motor limits
+                if(gear_ratios[new_gear] == 0.0): # Trap divide by zero
+                    new_motorspeed = 0.0
+                else:
+                    new_motorspeed = newsspeed / gear_ratios[new_gear]
+                if(new_motorspeed < h["motor-min"] or new_motorspeed > h["motor-max"]):
+                    # The closest wasn't close enough
+                    sspeed_error = True
+                    cur_gear = -1
+                else:
+                    cur_gear = new_gear
+                    sspeed_error = False
+
+            if(h["is-stopped"]):
+                # Spindle is now stopped. If we found a suitable gear, ask the operator to change to
+                #  it. If we didn't, tell the operator about it.
+#                if(cur_gear >= 0):
+#                    notify_prep(app,cur_gear,'')
+#                else:
+#                    # No suitable gear. Set it yourself or abort.
+#                    notify_prep(app,-1,'Requested Spindle speed out of range. Revert to manual control?')
+#                state = OPERATOR_WAIT
+                state = RUNNING
+
+        elif(state == OPERATOR_WAIT):
+            if(state_changed):
+                # Put up the dialog and wait for a response
+                message = _("Change gear %d and click continue when ready") % n
+                app.wm_withdraw()
+                app.update()
+                app.tk.call("nf_dialog", ".gear_change", _("Tool change"), message, "info", 0, _("Continue"))
+                app.update()
+
+        # Set the output pins each cycle
+        h["gear-no-out"] = cur_gear + 1
+        if(cur_gear >= 0):
+            h["gear-ratio-out"] = gear_ratios[cur_gear]
+        else:
+            h["gear-ratio-out"] = 0.0
+        h["motor-speed-out"] = motor_speed_out
+        h["enable-out"] = enabled
+        h["sspeed-error"] = sspeed_error
+        h["mspeed-limit"] = motor_limited
+        # 100ms cycle time
+        app.after(100)
+
+
+# Allows terminating. Something raises a KeyboardInterrupt 
+#  when they want us to quit.
+except KeyboardInterrupt:
+    pass

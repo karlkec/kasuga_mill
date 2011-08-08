@@ -1,0 +1,176 @@
+# ################################################
+# Components
+# ################################################
+loadrt threads name1=servo-thread period1=1000000
+loadrt pid num_chan=1
+
+loadrt hostmot2
+loadrt hm2_pci config="firmware=hm2/5i20/SVST8_4.BIT num_encoders=3 num_pwmgens=3 num_stepgens=0"
+setp hm2_5i20.0.pwmgen.pwm_frequency 40000
+setp hm2_5i20.0.watchdog.timeout_ns 10000000
+
+loadrt siggen
+loadrt line4to2 count=2
+loadrt mux4 count=2
+loadrt toggle
+loadrt passthru count=3
+loadrt reciprocal
+
+loadusr -Wn gui0 pyvcp -c gui0 servo-tuning-gui.xml
+
+# ################################################
+# Threads
+# ################################################
+
+addf hm2_5i20.0.read servo-thread
+addf line4to2.0 servo-thread
+addf line4to2.1 servo-thread
+addf mux4.0 servo-thread
+addf mux4.1 servo-thread
+addf pid.0.do-pid-calcs servo-thread
+addf hm2_5i20.0.write servo-thread
+addf hm2_5i20.0.pet_watchdog servo-thread
+addf siggen.0.update servo-thread
+addf toggle.0 servo-thread
+addf passthru.0 servo-thread
+addf passthru.1 servo-thread
+addf passthru.2 servo-thread
+addf reciprocal.0 servo-thread
+
+# ################
+# Siggen
+# ################
+
+net period <= gui0.period-f => reciprocal.0.in
+
+net amplitude <= gui0.amplitude-f => siggen.0.amplitude
+net frequency <= reciprocal.0.out => siggen.0.frequency
+
+net square-signal <= siggen.0.square => mux4.0.in0
+net triangle-signal <= siggen.0.triangle => mux4.0.in1
+net sine-signal <= siggen.0.sine => mux4.0.in2
+
+net square-select <= gui0.waveform-selection.Square => line4to2.0.in0
+net triangle-select <= gui0.waveform-selection.Triangle => line4to2.0.in1
+net sine-select <= gui0.waveform-selection.Sine => line4to2.0.in2
+
+net mux0-select-0 <= line4to2.0.out0 => mux4.0.sel0
+net mux0-select-1 <= line4to2.0.out1 => mux4.0.sel1
+
+# ################
+# Enable
+# ################
+
+net momentary-enable <= gui0.enable => toggle.0.in
+net global-enable <= toggle.0.out => pid.0.enable
+
+# ################
+# PID
+# ################
+
+net p-gain-in <= gui0.Pgain => passthru.0.in 
+net p-gain-out <= passthru.0.out => pid.0.Pgain
+
+net i-gain-in <= gui0.Igain => passthru.1.in 
+net i-gain-out <= passthru.1.out => pid.0.Igain
+
+net d-gain-in <= gui0.Dgain => passthru.2.in 
+net d-gain-out <= passthru.2.out => pid.0.Dgain
+
+setp pid.0.bias 0
+setp pid.0.FF0 0
+setp pid.0.FF1 0
+setp pid.0.FF2 0
+setp pid.0.deadband 0.01
+setp pid.0.maxoutput 1.0000
+
+net pid-command <= mux4.0.out => pid.0.command
+net pid-output <= pid.0.output
+net pid-feedback <= mux4.1.out => pid.0.feedback
+
+net x-axis-feedback => mux4.1.in0
+net y-axis-feedback => mux4.1.in1
+net z-axis-feedback => mux4.1.in2
+
+net x-axis-select <= gui0.axis-selection.X => line4to2.1.in0
+net y-axis-select <= gui0.axis-selection.Y => line4to2.1.in1
+net z-axis-select <= gui0.axis-selection.Z => line4to2.1.in2
+
+net mux1-select-0 <= line4to2.1.out0 => mux4.1.sel0
+net mux1-select-1 <= line4to2.1.out1 => mux4.1.sel1
+
+
+# ################
+# X [0] Axis
+# ################
+
+net x-axis-select => hm2_5i20.0.pwmgen.00.enable
+
+# encoder feedback
+setp hm2_5i20.0.encoder.00.counter-mode 0
+setp hm2_5i20.0.encoder.00.filter 1
+setp hm2_5i20.0.encoder.00.index-invert 0
+setp hm2_5i20.0.encoder.00.index-mask 0
+setp hm2_5i20.0.encoder.00.index-mask-invert 0
+setp hm2_5i20.0.encoder.00.scale  80572.1899401
+
+net x-axis-feedback <= hm2_5i20.0.encoder.00.position
+
+# position command signals
+setp hm2_5i20.0.pwmgen.00.output-type 1 #pwm on pin1, dir on pin2
+setp hm2_5i20.0.pwmgen.00.scale 1.0000
+
+net pid-output => hm2_5i20.0.pwmgen.00.value
+
+
+# ################
+# Y [1] Axis
+# ################
+
+net y-axis-select => hm2_5i20.0.pwmgen.01.enable
+
+# encoder feedback
+setp hm2_5i20.0.encoder.01.counter-mode 0
+setp hm2_5i20.0.encoder.01.filter 1
+setp hm2_5i20.0.encoder.01.index-invert 0
+setp hm2_5i20.0.encoder.01.index-mask 0
+setp hm2_5i20.0.encoder.01.index-mask-invert 0
+setp  hm2_5i20.0.encoder.01.scale  80572.1899401
+
+net y-axis-feedback <= hm2_5i20.0.encoder.01.position
+
+# position command signals
+setp hm2_5i20.0.pwmgen.01.output-type 1 #pwm on pin1, dir on pin2
+setp hm2_5i20.0.pwmgen.01.scale 1.0000
+
+net pid-output => hm2_5i20.0.pwmgen.01.value
+
+
+# ################
+# Z [2] Axis
+# ################
+
+net z-axis-select => hm2_5i20.0.pwmgen.02.enable
+
+# encoder feedback
+setp hm2_5i20.0.encoder.02.counter-mode 0
+setp hm2_5i20.0.encoder.02.filter 1
+setp hm2_5i20.0.encoder.02.index-invert 0
+setp hm2_5i20.0.encoder.02.index-mask 0
+setp hm2_5i20.0.encoder.02.index-mask-invert 0
+setp hm2_5i20.0.encoder.02.scale  80572.1899401
+
+net z-axis-feedback <= hm2_5i20.0.encoder.02.position
+
+# position command signals
+setp hm2_5i20.0.pwmgen.02.output-type 1 #pwm on pin1, dir on pin2
+setp hm2_5i20.0.pwmgen.02.scale 1.0000
+
+net pid-output => hm2_5i20.0.pwmgen.02.value
+
+# ################
+# Let's Go!
+# ################
+
+start
+loadusr halscope

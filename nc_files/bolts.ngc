@@ -1,0 +1,12 @@
+T1M6G1F1 (G1 is there to make the rapid after tool change show up, and F1 is needed with G1)
+G81 X0.8750 Y0.0000 Z-0.125  R0.25 F1.0
+X-0.4375 Y0.7578 Z-0.125  R0.25 F1.0
+X-0.4375 Y-0.7578 Z-0.125  R0.25 F1.0
+G80 (End of Cycle)
+M2
+T2M6G1F1 (G1 is there to make the rapid after tool change show up, and F1 is needed with G1)
+G81 X0.8750 Y0.0000 Z-1.0000  R0.25 F1.0
+X-0.4375 Y0.7578 Z-1.0000  R0.25 F1.0
+X-0.4375 Y-0.7578 Z-1.0000  R0.25 F1.0
+G80 (End of Cycle)
+M2

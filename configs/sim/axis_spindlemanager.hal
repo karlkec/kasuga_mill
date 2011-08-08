@@ -1,0 +1,42 @@
+loadusr -W hal_spindlemanager [SPINDLE_9]NUM_GEARS
+
+# connections between hal_spindlemanager, axis, and spindlemotor hal component
+
+# hal_spindlemanager takes signals from motion and feeds them to spindlemotor.
+
+# Input pins are:
+net sp-speed <= motion.spindle-speed-out => hal_spindlemanager.sspeed-in 
+net sp-enable <= motion.spindle-on => hal_spindlemanager.enable-in
+net sp-enable-ma_mo <= hal_spindlemanager.enable-out => spindlemotor.0.enable-in
+net sp-stopped <= spindlemotor.0.zero-speed => hal_spindlemanager.is-stopped
+net sp-override <= halui.spindle-override.value => hal_spindlemanager.override-in
+	
+# Output pins are:
+net ratio <= hal_spindlemanager.gear-ratio-out => spindlemotor.0.gear-ratio
+net motor-speed <= hal_spindlemanager.motor-speed-out => spindlemotor.0.commanded-speed
+
+# Input parameters are
+setp hal_spindlemanager.ratio-gear1 [SPINDLE_9]RATIO_1
+setp hal_spindlemanager.ratio-gear2 [SPINDLE_9]RATIO_2
+setp hal_spindlemanager.ratio-gear3 [SPINDLE_9]RATIO_3
+setp hal_spindlemanager.ratio-gear4 [SPINDLE_9]RATIO_4
+setp hal_spindlemanager.ratio-gear5 [SPINDLE_9]RATIO_5
+setp hal_spindlemanager.ratio-gear6 [SPINDLE_9]RATIO_6
+setp hal_spindlemanager.ratio-gear7 [SPINDLE_9]RATIO_7
+setp hal_spindlemanager.ratio-gear8 [SPINDLE_9]RATIO_8
+setp hal_spindlemanager.ratio-gear9 [SPINDLE_9]RATIO_9
+setp hal_spindlemanager.ratio-gear10 [SPINDLE_9]RATIO_10
+setp hal_spindlemanager.motor-min [SPINDLE_9]MOTOR_MIN
+setp hal_spindlemanager.motor-nom [SPINDLE_9]MOTOR_NOM
+setp hal_spindlemanager.motor-max [SPINDLE_9]MOTOR_MAX
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,24 @@
+				<table flexible_rows="[3]" flexible_columns="[3]">
+					<tablerow/>
+						<tablesticky sticky="new"/>
+						<hbox>
+							<label text="1:"/>
+							<number><halpin>"srpm-min-gear1"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+							<label text="-"/>
+							<number><halpin>"srpm-max-gear1"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						</hbox>
+						<number><halpin>"srpm-min-gear4"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						<number><halpin>"srpm-min-gear7"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+					<tablerow/>
+						<tablesticky sticky="ew"/>
+						<number><halpin>"srpm-min-gear2"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						<number><halpin>"srpm-min-gear5"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						<number><halpin>"srpm-min-gear8"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						<number><halpin>"srpm-min-gear10"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+					<tablerow/>
+						<tablesticky sticky="new"/>
+						<number><halpin>"srpm-min-gear3"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						<number><halpin>"srpm-min-gear6"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						<number><halpin>"srpm-min-gear9"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						<label text="9:850-1600"/>
+				</table>

@@ -1,0 +1,22 @@
+# Start by running
+# halrun -f test_spindlemanager.hal
+
+loadusr -Wn pyvcp pyvcp -c pyvcp spindltestpanel.xml
+#loadrt threads name1=servo-thread period1=1000000
+
+#loadrt spindlemotor count=1
+#addf spindlemotor.0 servo-thread
+
+# Need a real-time component to convert user gear selection (a float) from the panel
+#  to a S32 for axis_spindlemanager.
+#loadrt conv_float_s32 count=1
+#addf conv-float-s32.0 servo-thread
+#loadrt conv_s32_float count=1
+#addf conv-s32-float.0 servo-thread
+
+#loadusr -W hal_spindlemanager 10
+
+
+#loadusr halmeter
+#start
+#waitusr pyvcp

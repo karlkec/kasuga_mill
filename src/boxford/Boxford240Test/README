@@ -1,0 +1,46 @@
+Hi All,
+
+Having got to grips with comp and finally learning enough about HAL to make it work, I have written a toolchanger component for Boxford ATCs.
+
+This should work on 240, 160 and 125 and maybe others that have 8 station turrets and 
+use a 'move past pawl and reverse back to stall to lock' methodology.
+
+This will work without an index signal at each tool station.  
+The 160 and 125 don't have one ( at least mine didn't) and the ATC proximity switch on my 240 has never worked so I did away with it.
+
+You will need to read the toolchange.comp file, because it contains info on setting up in comments at the header.
+You may need to fine tune the parameters using setp on a running system and then hard code them in the .comp file once finalised.
+
+For ease of testing I have made a .tar.gz of my test directory from my ~/emc2/configs directory.
+You can simply copy the directory into your ~/emc2/configs and from inside the new directory run sudo comp --install toolchanger.comp
+Then run emc, select the Boxford240Test entry from the list and it should run.
+
+There is also a man file, toolchanger.9.gz which can be put in /usr/share/man/9/ if required
+
+I have hacked several settings from my actual machine setup, to make it run in 'simulation-ish'
+One of these forces it into an enabled state with 'setp iocontrol.0.emc-enable-in true'
+
+DO NOT use this with a real machine attached, my house computer does not even have a parport.
+
+Once started, home the axes, when you home 'A', a message will tell you that no tool is currently selected.
+Switch to the MDI and enter M6T1 and the tool number will update without any actual rotation.
+From menu Machine > Show Hal Configuration start Hal Configuration.
+Select pins > toolchanger , open the Watch window and click on each pin in turn until they all display
+
+See screen capture
+
+Then you can make a succession of M6Tx commands in the MDI text box and watch the signals change and the values increment 
+and then roll over at 360 degrees.
+
+As for using for real, just copy the .comp file across and use the info in the header to change your .hal and .ini files
+Do not attempt to use the ones in the .tar.gz with a real machine, they would be dangerous.
+I would suggest that you copy your existing machine config directory to another name and use that to implement the changes to .hal and .ini files required.
+
+You cannot jog the ATC with this component loaded because it hijacks the ATC stepgen, so I have written in a basic jog facility into it which is accessed 
+via the pyvcp panel.
+This is mainly of use when setting up parameters to sort out any over or under shoot in tool position.
+
+Hope someone finds it of use
+
+regards
+

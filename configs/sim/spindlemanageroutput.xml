@@ -1,0 +1,107 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<pyvcp>
+ <vbox>
+ <relief>RIDGE</relief>         
+ <bd>6</bd>
+		<label><width>1</width></label>
+		<labelframe text="Spindle"> 
+			<bd>3</bd>
+			<font>("Helvetica",11)</font>
+			<vbox>
+				<relief>RIDGE</relief>         
+				<bd>2</bd>
+				<label>
+					<text>"Spindle Manager Pins"</text>
+					<font>("Helvetica",11)</font>
+				</label>
+			</vbox>
+			<vbox>
+				<relief>RIDGE</relief>         
+				<bd>2</bd>
+				<hbox>
+					<number>
+						<halpin>"sspeed-in"</halpin><font>("Helvetica",10)</font><format>".0f"</format>>
+					</number>
+					<label text="sspeed-in" anchor="center"/>
+				</hbox>
+				<hbox>
+					<number><halpin>"mspeed-in"</halpin><font>("Helvetica"),10</font><format>".0f"</format></number>
+					<label text="mspeed-in" anchor="center"/>
+				</hbox>
+				<hbox>
+					<led halpin="use-man-speed" size="11" on_color="red" off_color="grey" anchor="center"/>
+					<label text="use-man-speed" anchor="center"/>
+				</hbox>
+				<hbox>
+					<led halpin="mspeed-set" size="11" on_color="red" off_color="grey" anchor="center"/>
+					<label text="mspeed-set" anchor="center"/>
+				</hbox>
+				<hbox>
+					<led halpin="use-man-gear" size="11" on_color="red" off_color="grey" anchor="center"/>
+					<label text="use-man-gear" anchor="center"/>
+				</hbox>
+				<hbox>
+					<s32><halpin>"gear-no-in"</halpin><font>("Helvetica",10)</font><format>".0f"</format></s32>
+					<label text="gear-no-in" anchor="center"/>
+				</hbox>
+				<hbox>
+					<led halpin="enable-in" size="11" on_color="red" off_color="grey" anchor="center"/>
+					<label text="enable-in" anchor="center"/>
+				</hbox>
+				<hbox>
+					<led halpin="is-stopped" size="11" on_color="red" off_color="grey" anchor="center"/>
+					<label text="is-stopped" anchor="center"/>
+				</hbox>
+				<hbox>
+					<number><halpin>"override-in"</halpin><font>("Helvetica",10)</font><format>".3f"</format></number>
+					<label text="override-in" anchor="center"/>
+				</hbox>
+				<hbox>
+					<led halpin="help-request" size="11" on_color="red" off_color="grey" anchor="center"/>
+					<label text="help-request" anchor="center"/>
+				</hbox>
+				<hbox>
+					<s32><halpin>"gear-no-out"</halpin><font>("Helvetica",10)</font><format>".0f"</format></s32>
+					<label text="gear-no-out" anchor="center"/>
+				</hbox>
+				<hbox>
+					<number><halpin>"gear-ratio-out"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+					<label text="gear-ratio-out" anchor="center"/>
+				</hbox>
+				<hbox>
+					<number><halpin>"motor-speed-out"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+					<label text="motor-speed-out" anchor="center"/>
+				</hbox>
+				<hbox>
+					<led halpin="enable-out" size="11" on_color="red" off_color="grey" anchor="center"/>
+					<label text="enable-out" anchor="center"/>
+				</hbox>
+				<hbox>
+					<led halpin="sspeed-error" size="11" on_color="red" off_color="grey" anchor="center"/>
+					<label text="sspeed-error" anchor="center"/>
+				</hbox>
+				<hbox>
+					<led halpin="mspeed-limit" size="11" on_color="red" off_color="grey" anchor="center"/>
+					<label text="mspeed-limit" anchor="center"/>
+				</hbox>
+				<hbox>
+					<number><halpin>"state-out"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+					<label text="state-out" anchor="center"/>
+				</hbox>
+				<hbox>
+					<number><halpin>"gear-lower-limit"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+					<label text="gear-lower-limit" anchor="center"/>
+				</hbox>
+				<hbox>
+					<number><halpin>"gear-upper-limit"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+					<label text="gear-upper-limit" anchor="center"/>
+				</hbox>
+				<hbox>
+					<number><halpin>"unlimited-motor"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+					<label text="unlimited-motor" anchor="center"/>
+				</hbox>
+			</vbox>
+		</labelframe>
+		<label><width>1</width></label>
+ </vbox>
+</pyvcp>

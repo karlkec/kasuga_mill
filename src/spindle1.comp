@@ -1,0 +1,301 @@
+/********************************************************************
+* Description:  spindle1.comp
+*               Typedefs for spindle1 HAL component.
+*
+* Author: Les Newell <les at sheetcam dot com>
+* License: LGPL Version 3 or later
+*
+* Modified by Karl Cunningham 6-28-2011 <karlc at keckec dot com> 
+*
+* Copyright (c) 2011 All rights reserved.
+*
+********************************************************************
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of version 2 or later of the GNU General
+ * Public License as published by the Free Software Foundation.
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111 USA
+ *
+ * THE AUTHORS OF THIS LIBRARY ACCEPT ABSOLUTELY NO LIABILITY FOR
+ * ANY HARM OR LOSS RESULTING FROM ITS USE.  IT IS _EXTREMELY_ UNWISE
+ * TO RELY ON SOFTWARE ALONE FOR SAFETY.  Any machinery capable of
+ * harming persons must have provisions for completely removing power
+ * from all motors, etc, before persons enter any danger area.  All
+ * machinery must be designed to comply with local and national safety
+ * codes, and the authors of this software can not, and do not, take
+ * any responsibility for such compliance.
+ *
+ * This code was written as part of the EMC HAL project.  For more
+ * information, go to www.linuxcnc.org.
+ *
+*************************************************************************/
+
+component spindle1 "Control a spindle with different acceleration and deceleration and optional gear \
+change scaling";
+
+description """This component will control a spindle with adjustable acceleration and deceleration.
+It is designed for use with non-servo spindle drives that have separate fwd/reverse inputs, such as DC drives and inverters.
+An encoder on the motor is used as feedback, and its output (position and velocity) are scaled by the ratio of
+the selected gear. A motor nominal speed, along with motor maximum ad minimum speeds are used to determine if the
+chosen gear can accommodate the requested spindle speed. If not, the motor speed is limited and the limited output pin
+is set True.
+
+The component allows for gearboxes with up to 16 gears. Each gear has individual control of gear ratio, and direction.
+""";
+
+pin in unsigned select-gear "Select a gear. Must be in the range 0 -> number of available gears  -1.";
+pin in float commanded-speed "Commanded spindle speed in RPM";
+pin in float actual-speed "Actual motor speed from the encoder in RPM.";
+pin in bit enable-in "If FALSE, the motor will be stopped";
+pin in float motor-pos-in "Motor position in revolutions from encoder. Will be scaled by the gear ratio and fed to spindle-pos-out";
+
+pin out float spindle-pos-out "motor-pos-in scaled by the gear ratio";
+pin out float spindle-rpm "Current spindle speed in RPM. positive output = forward, negative output = reverse.";
+pin out float spindle-rpm-abs "Absolute spindle speed in RPM. Useful for spindle speed displays";
+pin out float output "Scaled output (to PWM or similar)";
+
+pin out bit at-speed "TRUE when the spindle is at speed";
+pin out bit forward "TRUE for forward rotation";
+pin out bit reverse "TRUE for reverse rotation. Both forward and reverse are false when the spindle is stopped.";
+/* FIXME  */
+pin out bit brake "TRUE when decelerating";
+pin out bit zero-speed "TRUE when the spindle is stationary";
+
+param rw float motor-nom "Nominal motor speed in RPM";
+param rw float motor-min "Minimum allowed motor speed in RPM";
+param rw float motor-max "Maximum allowed motor speed in RPM";
+param rw float speed-tolerance """When the difference between actual spindle speed and commanded spindle speed is \
+less than this fraction, at-speed is set to True. This should \
+be a number greater than 1.0. For instance, a speed-tolerance of 1.10 will result in a +/-10% tolerance being applied \
+to motor speed""";
+param rw float zero-tolerance=0.01 "Fraction of nominal motor speed to declare the spindle stopped";
+param rw float accel "Allowable acceleration in motor RPM / sec. Set to 0 to allow any acceleration";
+param rw float decel "Allowable deceleration in motor RPM / sec. Set to 0 to allow any deceleration";
+param rw float spindle-lpf "Smooth the spindle-rpm-abs output when at speed. 0 = disabled. Suitable values are probably between 1 and 20 depending on how stable your spindle is";
+
+pin out bit out_of_range """TRUE when the motor speed for the requested spindle speed would be >max or <min.
+
+.TP
+\\fBThe following pins are created depending on how many gears you have selected in the 'gears=' parameter.\\fP
+One of each pin is created for each gear. If no gears are specified the one gear will be created. For instance
+if you have gears=1 on your command line, you will have  two scale pins:
+ \\fBspindle.\\fP\\fIN\\fN\\fB.scale.0\\fP
+ \\fBspindle.\\fP\\fIN\\fN\\fB.scale.1\\fP
+
+.TP
+\\fBspindle.\\fP\\fIN\\fN\\fB.scale.\\fPx float in
+Scale the output. For multiple gears you would use a different scale for each gear. If you need to reverse the
+output for some gears, use a negative scale.
+""";
+
+variable float ngears;
+variable gear_t gears[16];
+variable float prev_cmdspeed; /* Previous commanded speed, to check acceleration */
+
+function _ fp;
+license "GPL";
+option extra_setup yes;
+include "components/spindle.h";
+
+;;
+
+int numgears[16] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+RTAPI_MP_ARRAY_INT(numgears, 16, "Number of gears");
+
+int add_gear(int index, char *prefix, gear_t * g);
+
+FUNCTION(_) {
+    float cmdspeed; // Motor RPM for commanded spindle speed
+    float curspeed; // Current spindle speed
+	float motorspeed; // Current motor speed
+    float diff;
+    float tmp;
+    bool speed_error = false;
+    bool reversing; // In the process of reversing
+	unsigned current_gear;
+
+	/* Order of operations:
+	 * 1. Check whether the GEAR pin is within range
+	 * 2. Convert ACTUAL_SPEED and MOTOR_POS_IN (encoder inputs from the motor) to spindle speed.
+	 * 3. Test for ZERO_SPEED
+	 * 4. Generate SPINDLE_RPM_ABS from current spindle speed, possibly filtered.
+	 * 5. Make a copy of the COMMANDED_SPEED input, scaled to motor speed.
+	 * 6. If the ENABLE input is FALSE, stop spindle.
+	 * 7. Determine whether we are AT_SPEED, by comparing commanded speed and the motor speed
+	 * 8. Check commanded speed against minimum and maximum motor speeds. Set error and stop spindle if needed.
+	 * 9. Adjust the commanded speed to compensate for motor load.
+	 * 10. Determine whether we are reversing direction, by comparing the polarity of the commanded_speed to motor speed.
+	 * 11. Limit speed changes to avoid going through zero or exceeding acceleration limitations.
+	 * 12. Set FORWARD and REVERSE outputs according to direction.
+	 * 13. Set OUTPUT as the absolute value of the desired output RPM.
+	 */
+    gear_t *thisgear;
+	current_gear = select_gear;
+	if (current_gear > 15) 
+		current_gear = 15;
+	if (current_gear < 0)
+		current_gear = 0;
+	thisgear = &gears[current_gear];
+
+	/* Scale the encoder output (motor RPM) by the gear ratio to 
+	 *  convert motor speed to spindle RPM */
+	spindle_pos_out = motor_pos_in;
+	spindle_pos_out /= *(thisgear->scale);
+
+	motorspeed = actual_speed;
+	curspeed = motorspeed / *(thisgear->scale);
+    spindle_rpm = curspeed;
+    if (motorspeed >= 0) {
+        tmp = curspeed;
+		zero_speed = ((motorspeed / motor_nom) < zero_tolerance);
+	} else {
+        tmp = -curspeed;
+		zero_speed = ((-motorspeed / motor_nom) < zero_tolerance);
+    }
+
+	/* Create a (possibly filtered) absolute value of spindle speed. This is only filtered when
+	 *  AT_SPEED to improve its slew rate when accelerating or decelerating. */
+	if(zero_speed)
+		spindle_rpm_abs = 0;
+	else {
+		if (spindle_lpf > 0 && at_speed) {
+			spindle_rpm_abs += (tmp - spindle_rpm_abs) * spindle_lpf * fperiod;
+		} else {
+			spindle_rpm_abs = tmp;
+		}
+	}
+
+	/* From here on, everyting is in terms of motor speed */
+    if (enable_in) {
+        cmdspeed = commanded_speed;
+		cmdspeed *= *(thisgear->scale);
+	} else {
+        cmdspeed = 0;
+    }
+
+	/* Determine whether we're at-speed. speed_tolerance is a ratio to 
+	 *  commanded speed, so it doesn't matter that we use motor speed. */
+    tmp = speed_tolerance;
+	if (tmp >= 1.0) { 
+		if (motorspeed > 0.0) {
+			if (motorspeed > cmdspeed) {
+				at_speed = (cmdspeed * tmp) >= motorspeed;
+			} else {
+				at_speed = (motorspeed * tmp) >= cmdspeed;
+			}
+		} else if(motorspeed < 0.0) { // Going in reverse direction
+			if (motorspeed < cmdspeed) {
+				at_speed = (cmdspeed * tmp) <= motorspeed;
+			} else {
+				at_speed = (motorspeed * tmp) <= cmdspeed;
+			}
+		} else // Stopped
+			at_speed = FALSE;
+	} 
+
+	/* Check against the minimum motor speed. If too low, set speed
+	 * 	to zero and set speed_error */
+    tmp = motor_min;
+	if (cmdspeed > 0 && cmdspeed < tmp) {
+		cmdspeed = 0.0;
+		speed_error = true;
+	}
+	if (cmdspeed < 0 && cmdspeed > -tmp) {
+		cmdspeed = 0.0;
+		speed_error = true;
+	}
+
+	/* Check against the maximum motor speed */
+    tmp = motor_max;
+	if (cmdspeed > 0 && cmdspeed > tmp) {
+		cmdspeed = 0.0;
+		speed_error = true;
+	}
+	if (cmdspeed < 0 && cmdspeed < -tmp) {
+		cmdspeed = 0.0;
+		speed_error = true;
+	}
+
+	/* Now apply speed change limitations, based on the commanded speed relative to the 
+	 *  last time through. */
+    diff = cmdspeed - prev_cmdspeed;
+	/* Limit diff so we don't go through zero speed */
+    if ((prev_cmdspeed > 0 && diff < -prev_cmdspeed) || 
+		(prev_cmdspeed < 0 && diff > -prev_cmdspeed))
+			diff = -prev_cmdspeed;
+
+	/* Limit spindle acceleration and deceleration */
+    if (accel > 0 && !reversing) {
+		tmp = accel * fperiod; /* in RPM per loop cycle */
+        if (cmdspeed > 0 && diff > tmp)
+			diff = tmp;
+		else if (cmdspeed < 0 && diff < -tmp)
+			diff = -tmp;
+    }
+    if (decel > 0) {
+		tmp = decel * fperiod;
+        if (reversing) {
+            if (cmdspeed >= 0 && diff > tmp)
+				diff = tmp;
+			else if (cmdspeed <= 0 && diff < -tmp)
+				diff = -tmp;
+        } else {
+            if (cmdspeed >= 0 && diff < -tmp)
+				diff = -tmp;
+			else if (cmdspeed <= 0 && diff > tmp)
+				diff = tmp;
+        }
+    }
+	/* Apply the possibly-limited diff */
+	cmdspeed = prev_cmdspeed + diff;
+
+	/* Set the forward or reverse outputs. */
+    if (cmdspeed != 0) {
+        forward = (cmdspeed > 0);
+        reverse = (cmdspeed < 0);
+    } else { /* don't try to move once stopped */
+        forward = (motorspeed > 0) && forward;
+        reverse = (motorspeed < 0) && reverse;
+    }
+
+    out_of_range = speed_error;
+	prev_cmdspeed = cmdspeed;
+	if(cmdspeed >= 0)
+		output = cmdspeed;
+	else
+		output = -cmdspeed;
+	brake = (cmdspeed == 0.0 && !zero_speed);
+}
+
+EXTRA_SETUP() {
+    int ct;
+    int r;
+    ngears = numgears[extra_arg];
+    if (ngears < 1 || ngears > 16) {
+        rtapi_print_msg(RTAPI_MSG_ERR,"Number of gears is out of range\n");
+        return(-EINVAL);
+    }
+    for(ct = 0; ct < ngears; ct++) {
+        r = add_gear(ct, prefix,&gears[ct]);
+        if (r != 0) return r;
+    }
+    return(0);
+}
+
+int add_gear(int index, char *prefix, gear_t * g)
+{
+    int r;
+    r = hal_pin_float_newf(HAL_IN, &(g->scale), comp_id,
+        "%s.scale.%i", prefix,index);
+    if (r != 0) 
+		return r;
+    *g->scale = 1;
+    return(0);
+}

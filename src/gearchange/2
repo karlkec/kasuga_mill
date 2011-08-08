@@ -1,0 +1,1249 @@
+#!/usr/bin/python
+""" This is a program to prompt the user to change the gear settings.
+        Copyright (C) 2011 Karl Cunningham
+
+        This program is free software; you can redistribute it and/or modify it
+        under the terms of the GNU General Public License as published by the Free
+        Software Foundation; either version 3 of the License, or any later version.
+
+        This program is distributed in the hope that it will be useful, but WITHOUT
+        ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+        FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+        You should have received a copy of the GNU General Public License along
+        with this program; if not, see <http://www.gnu.org/licenses/>.
+"""
+""" This user-space program does spindle speed and gear changes. Supports automatic as 
+    well as manual gear selectrion, and manually-controlled or gcode-controlled spindle speed.
+
+	One command-line argument is required -- the number of gears used on this
+    machine. Normally this comes from an INI file entry.
+
+    Automatic gear selection is made based on required spindle speed, motor
+    speed maximum and minimum, and motor nominal speed. The current gear will be
+    used if the motor will remain within its speed range. if a gear change is
+    required, the gear is chosen which will run the motor as close to its
+    nominal speed as possible.  Any spindle speed change other than caused by
+    spindle speed override is evaluated for a possible gear change.
+
+    Manual vs automatic gear-selection mode is indicated by a hal output pin. When in manual
+    gear-selection mode, the operator can select and set the gear via hal input
+    pins. The choose-manual-gear inpu pin latches the selected gear.
+
+    If an automatic gear change is indicated, the spindle is stopped, the
+    operator is advised to change the gear, but is given the choice to go to
+    manual gear selection. Manual vs program-based spindle speed is selected via
+    a level-sensitive hal pin. 
+
+	A. Manual speed setting is used when use-man-speed is TRUE. Otherwise,
+	spindle speed is determined from pin sspeed-in
+
+	B. Manual gear-setting mode is determined by the state of the use-man-gear
+	input pin. Otherwise, the needed gear is calculated.
+
+    C. In automatic spindle-speed mode, monitors for spindle-speed changes. A
+    speed change is determined when the ratio of motion.spindle-speed-out to
+    halui.spindle-override.value is stable for two or more consecutive cycles,
+    but is different by more than 0.1% from the previous ratio. This allows
+    changes to the spindle override to be made without changing gears (but may
+    be subject to motor speed limits downstream of this component). If the ratio
+    is stable but has changed by more than 0.1% from the previous stable value,
+    the new speed is evaluated for a possible gear change.
+
+	D. In manual spindle-speed mode, a new speed is accepted when the
+	mspeed-set input is TRUE and mspeed-in is different than the last time
+	mspeed-set was TRUE.
+
+	E. When a new spindle speed is seen, a determination is made whether it can
+	be accommodated with the current gear setting (keeping the motor between min
+	and max). If so, no gear change is called for and the motor speed is adjusted
+	to meet the newly-requested spindle speed.
+
+	F. If the new spindle speed cannot be accommodated and the gear setting is
+	in manual mode, a dialog advises the user of such and asks if they want to
+	change gears. The dialog also indicates what the nearest speed is that can be
+	made using the same gear, keeping the limits of motor speed.
+
+	G. If the operator wants to change gears, the spindle is stopped and
+	the gear change dialog for the needed gear is presented. The spindle is then
+	started with the new motor speed.
+
+	H. If the answer is NO (keep the old gear), the motor speed is changed to
+	the limit that produces a spindle speed closest to what is needed and the
+	mspeed-limit output is set TRUE.
+
+    I. If in automatic gear-selection mode, the determination of whether a gear
+    change is necessary is done by evaluating the new spindle speed request
+    against motor speed ranges and gear ratios. If the new spindle speed is
+    zero, no gear change is performed.
+
+    J. If the spindle speed request is out of range of the machine in any gear,
+    a dialog is presented asking the user whether to use the closest avaiable
+    machine speed. If the user agrees, operation continues that way. If not,
+    halts the gcode program.
+"""
+"""
+Operator controls:
+1. Checkbox for manual spindle speed. Unchecked is program-controlled spindle speed
+2. A spinbox to enter the manual spindle speed
+3. A button to accept the spindle speed entered into the spinbox.
+4. A checkbox, to enable dialog box notices of programmed speed changes.
+5. A spinbox to manually select a gear, if gear_mult is not set
+6. Or a set of radio buttons to select the gear, if gear_mult is set
+7. A button to acecpt the manually-selected gear
+8. A button to toggle between auto and manual gear selection
+
+Operator indicators:
+1. A set of LEDs to indicate the currently-selected gear
+2. A numerical value for the current gear ratio
+3. An LED to indicate the spindle speed is out of range.
+4. A pair of LEDs to indicate whether manual or auto gear selection
+    is being used.
+5. An LED to indicate whether the motor speed is being limited
+6. A set of LEDs to indicate the gear being used.
+7. A set of numerical values for the max and min speeds for each gear.
+
+A choice is provided between program-generated vs manual spindle
+speed. This selection is set by a HAL input pin, use_man_speed.  If
+manual spindle speed is being usd and the operator has enabled the
+checkbox connected to (spindle.io.inpin.speed_change_notice), and a
+HALUI spindle speed change is seen, a dialog is presented to the
+operator showing the new speed and advising that the program is
+requesting a spindle speed change. The operator can click a button
+that acknowledges the notice, or a button which indicates they will
+change the speed. If the operator chooses to change the speed
+manually, feed will stop until a speed change is entered by
+pressing the button connected to hal pin mspeed-set. In manual
+spindle speed mode, the output pin at-speed-out is set to False as
+soon as a programmed spindle speed change is seen. It is set True
+again 1.5ms after new speed is entered and the new motor speed is
+sent to the output, to allow the spindle real-time hal component
+(assumed to be running on a 1ms thread) to respond and take its
+at-speed output False, so HALUI doesn't see a glitch in at-speed.
+
+When a manual or programmed speed change occurs that requires a gear
+change, the spindle is stopped and a prompt issued to the operator
+to change gears. The operator responds by either changing the gear
+and clicking OK, by clicking a button to use manual gear selection,
+or by clicking a button to abort the running gcode program. If the
+operator clicks OK, the spindle is started at the proper speed for
+the new gear. The gcode program will continue when the at-speed hal
+signal becomes True.
+
+When a manual gear change is seen, feed is stopped, then the
+spindle is stopped and a prompt to the operator to change the gear
+is issued. The operator responds by either changing the gear and
+clicking OK, by clicking the button to use another gear, or by
+clicking the button to abort the program. If the user chooses to use
+another gear, they are returned to the pyvcp screen to choose that
+gear (or the same gear again), and the process repeats.
+
+
+
+"""
+	
+import sys, os, time, str
+import gettext
+import subprocess
+import emc, hal
+import os.path
+
+EXIT_OK = 0
+EXIT_ERROR = 255
+answer = EXIT_OK
+
+# Speed change tolerance. If the motor speed change is within this value of the
+# last stable speed, we don't worry about it.
+RATIO_TOL_UPPER = 1.001
+RATIO_TOL_LOWER = 0.999
+
+BASE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), ".."))
+gettext.install("emc2", localedir=os.path.join(BASE, "share", "locale"), unicode=True)
+
+# Global variables used for input, output, and parameter checking
+stable = {} # Store last stable values
+previous = {} # Store previous values of certain input pins
+control = {} # Values which control operation
+
+class Halinputpins:
+    def __init__(self,numgears,gear_mult):
+        self.sspeed_in = 0.0
+        self.mspeed_in = 0.0
+        self.use_man_speed = False
+        self.speed_change_notice = False
+        self.mspeed_set = False
+        self.enable_in = False
+        self.is_stopped = False
+        self.override_in = 0.0
+        self.help_request = False
+        self.gear_man_auto = False
+        self.set_gear = False
+        if(self.gear_mult):
+            # use either gear-no-in or one of gear-selectedn.
+            self.gear_select = []
+            for gearno in range(self.ngears):
+                self.gear_select.append(False)
+        else:
+            self.gear_no_in = 0
+
+class Haloutputpins:
+    def __init__(self,numgears,gear_mult):
+        # Outputs
+        self.gear_no_out = 0
+        self.gear_ratio_out = 0.0
+        self.motor_speed_out = 0.0
+        self.enable_out = False
+        self.sspeed_error = False
+        self.at_speed_out = False
+        self.mspeed_limit = False
+        self.man_gear = False
+        self.auto_gear = True
+        self.srpm_min_gear = []
+        self.srpm_max_gear = []
+        self.cur_gear = []
+        for gearno in range(ngears):
+            self.srpm_min_gear.append(0.0)
+            self.srpm_max_gear.append(0.0)
+            self.cur_gear.append(False)
+        self.gear_lower_limit = 0.0
+        self.gear_upper_limit = 0.0
+        self.unlimited_motor = 0.0
+        self.stop_pgm = False
+        self.feed_hold = False
+
+class Halparams:
+    def __init__(self,numgears,gear_mult):
+        self.ngears = numgears
+        self.ratio_gear = []
+        for gearno in range(self.ngears):
+            self.ratio_gear.append(0.0)
+        self.motor_max = 0.0
+        self.motor_min = 0.0
+        self.motor_nom = 0.0
+
+class Halprev:
+    """ Previous values of selected input pins
+    """
+    def __init__(self):
+        self.sspeed_in = 0.0
+        self.mspeed_in = 0.0
+        self.override_in = 0.0
+        self.gear_man_auto = False
+
+class Halstuff:
+    def __init__(self,numgears,gear_mult):
+        self.ngears = numgears
+        self.gear_mult = gear_mult
+        self.inpin = Halinputpins(self.numgears,self.gear_mult)
+        self.outpin = Haloutputpins(self.numgears,self.gear_mult)
+        self.param = Halparams(self.numgears,self.gear_mult)
+        self.prev = Halprev()
+
+    def latch_pins():
+        """ Saves selected previous values and latches the input 
+            pins to variables, and saves previous values of certain variables.
+        """
+        self.prev.sspeed_in = self.inpin.sspeed
+        self.inpin.sspeed_in = h["sspeed-in"]
+        self.prev.mspeed_in = self.inpin.mspeed
+        self.inpin.mspeed_in = h["mspeed-in"]
+        self.speed_change_notice = h["speed-change-notice"]
+        self.inpin.use_man_speed = h["use-man-speed"]
+        self.inpin.mspeed_set = h["mspeed-set"]
+        self.inpin.enable_in = h["enable-in"]
+        self.inpin.is_stopped = h["is-stopped"]
+        self.prev.override_in = self.inpin.override
+        self.inpin.override_in = h["override-in"]
+        self.inpin.help_request = h["help-request"]
+        self.inpin.gear_man_auto = h["gear-man-auto"]
+        self.inpin.set_gear = h["set-gear"]
+        if(self.gear_mult):
+            # use either gear-no-in or one of gear-selectedn.
+            for gearno in range(self.ngears):
+                self.inpin.gear_select[gearno] = h["gear-select%d"%(gearno+1)]
+        else:
+            self.inpin.gear_no_in = h["gear-no-in"]
+
+    def latch_params():
+        """ Latches parameters
+        """
+        for gearno in range(self.ngears):
+            self.param.ratio_gear[gearno] = h["ratio-gear%d"%(gearno+1)]
+        self.param.motor_max = h["motor-max"] 
+        self.param.motor_min = h["motor-min"]
+        self.param.motor_nom = h["motor-nom"]
+
+    def latch_inputs():
+        self.latch_pins()
+        self.latch_params()
+
+    def update_outputs():
+        """ Sends pin values to the output pins
+        """
+        h["gear-no-out"] = self.outpin.gear_no
+        h["gear-ratio-out"] = self.outpin.gear_ratio
+        h["motor-speed-out"] = self.outpin.motor_speed
+        h["enable-out"] = self.outpin.enable
+        h["sspeed-error"] = self.outpin.sspeed_error
+        h["at-speed-out"] = self.outpin.at_speed_out
+        h["mspeed-limit"] = self.outpin.mspeed_limit
+        for gearno in range(self.ngears):
+            h["srpm-min-gear%d"%(gearno+1)] = self.outpin.srpm_min_gear[gearno]
+            h["srpm-max-gear%d"%(gearno+1)] = self.outpin.srpm_max_gear[gearno]
+            h["cur-gear%d"%(gearno+1)] = self.outpin.cur_gear[gearno]
+        h["gear-lower-limit"] = self.outpin.gear_lower_limit
+        h["gear-upper-limit"] = self.outpin.gear_upper_limit
+        h["man-gear"] = self.outpin.man_gear
+        h["auto-gear"] = self.outpin.auto_gear
+        h["unlimited-motor"] = self.outpin.unlimited_motor
+        h["stop-pgm"] = self.outpin.stop_pgm
+        self.outpin.stop_pgm = False  # Reset the variable after use
+        h["feed-hold"] = self.outpin.feed_hold
+
+class Motor:
+    def __init__(self):
+        # motorspeed is always positive regardless of direction
+        self.motorspeed = 0.0  
+        self.direction = 0  # Current motor direction -1 for CCW, +1 for CW
+        self.limited = False
+        self.unlimited_speed = 0.0
+
+    def update_input(self,io):
+        """ Updates anything that depends on hal input pins.
+        """
+        pass
+
+    def update_output(self,io):
+        """ Updates the output pins pertinent to the motor.
+        """
+        io.outpin.motor_speed_out = self.motorspeed * self.direction
+        io.outpin.mspeed_limit = self.limited
+        #io.outpin.unlimited_motor = self.unlimited_speed
+
+    def update_speed(self,spindle,gear,io):
+        """ Calculates a new motor speed from the spindle speed, gear ratio, 
+            and motor limits.
+        """
+        self.motorspeed = spindle.curspeed * gear.cur_ratio
+        self.direction = spindle.curdir
+        self.unlimited_speed = self.motorspeed
+        if(self.motorspeed != 0.0):
+            # Test for limits
+            if(self.motorspeed > io.param_motor_max):
+                self.motorspeed = gear.cur_ratio * io.param_motor_max
+                self.limited = True
+            elif(self.motorspeed < io.param_motor_min):
+                self.motorspeed = gear.cur_ratio * io.param_motor_min
+                self.limited = True
+            else: # Within range
+                self.limited = False
+        else:
+            self.limited = False
+    
+    def in_range(self,io,speed):
+        """ Returns True if the given motor speed is within range, or
+            False if not.
+        """
+        tmp = abs(speed)
+        return (tmp >= io.param_motor_min and tmp <= io.param_motor_max)
+
+class Gearbox:
+    """ Keeps track of which gear is currently in use, what that ratio is, and 
+        max and minimum spindle speeds
+    """
+    def __init__(self,numgears,gear_mult):
+        self.ngears = numgears
+        self.gear_mult = gear_mult
+        self.curgear = -1  # Current gear (0-based)
+        self.curratio = 1.0 
+        self.mangear = False  # Manual gear selection
+
+    def update_input(self,io):
+        """ Updates anything that is locally maintained that might be subject to
+            change due to hal pin or parameter value changes.
+        """
+        self.curratio = io.param.ratio_gear[self.curgear]
+        # Toggle self.mangear on low-to-high transition of
+        #  io.inpin.gear_man_auto
+        if(io.inpin.gear_man_auto and not io.prev.gear_man_auto):
+            self.mangear = not self.mangear
+
+    def update_output(self,io):
+        """ Updates anything that feeds hal output pins.
+        """
+        io.outpin.gear_no_out = self.curgear + 1
+        io.outpin.gear_ratio_out = self.curratio
+        for gearno in range(self.ngears):
+            # Update the minimum and maximum spindle RPMs for each gear.
+            io.outpin.self.srpm_min_gear[gearno] = (io.inpin.motor_min *
+                                                    io.inpin.ratio_gear[gearno])
+            io.outpin.self.srpm_max_gear[gearno] = (io.inpin.motor_max *
+                                                    io.inpin.ratio_gear[gearno])
+            # Set the pin to indicate the current gear True, and all the rest
+            #  False
+            if(gearno == self.curgear):
+                io.outpin.cur_gear[gearno] = True
+            else:
+                io.outpin.cur_gear[gearno] = False
+
+    def check_manual_gear_change(self,io):
+        """ Checks io pins for a manual gear change. This will occur when
+            io.inpin.man_gear is True, io.inpin.set_gear is true, and a new gear
+            has been selected. The gear selection is from either io.inpin.gear_select[]
+            or io.inpin.gear_no_in, depending on whether gear_mult was enabled when
+            this program was started. If no manual selection was made, or if the
+            selection was invalid, returns -1. Otherwise, returns the 
+            manually-selected gear.
+        """
+        newgear = -1
+        if(io.inpin.set_gear and io.inpin.man_gear):
+            if(self.gear_mult):
+                # Find which gear is selected from the multiple ones in
+                # io.inpin.gear_select[]. Choose the highest one of
+                # the array of the radio-button selection.
+                for i in range(ngears,-1,-1):  # From ngears down to 0
+                    if(io.inpin.gear_select[i]):
+                        newgear = i
+                        break
+            else:
+                # Get gear number from io.inpin.gear_no_in. Check for proper
+                #  range.
+                if(io.inpin.gear_no_in > 0 and io.inpin.gear_no_in <= ngears):
+                    newgear = io.inpin.gear_no_in - 1
+            if(newgear >= 0 and newgear != self.mangear):
+                self.mangear = newgear
+
+        return newgear
+
+
+    def find_gear(self,io,speed):
+        """ Tries to find a gear suitable for the given speed. Returns the gear
+            number of the gear with the ratio that would keep the motor closest to
+            its nominal speed. If the speed cannot be accommodated, returns -2.
+            If the io pins haven't been populated yet such that this function
+            cannot determine a gear setting, returns -3.
+        """
+        try:
+            speedratio = 1e9  # very large number
+            # Trap divide-by-zero errors that will happen if the parameters aren't 
+            #  yet populated.
+            for gearno in range(1,control["ngears"]+1):
+                trialratio = newspeed * h["ratio-gear%d"%(gearno)] / h["motor-nom"]
+                if(trialratio < 1.0):
+                    trialratio = 1 / trialratio
+                if(trialratio < speedratio):
+                    speedratio = trialratio
+                    new_gear = gearno
+            # We've got the gear with the ratio closest to running the motor at nominal speed.
+            # Check that it's within the motor limits
+            new_motorspeed = newspeed / io.ratio_gear[new_gear]
+            if(speed >= (io.param.motor_min / io.param.ratio_gear[0]) and 
+                    (speed <= io.param.motor_max / io.param.ratio_gear[self.ngears-1]):
+                return new_gear
+            else:
+                # No gear will work
+                return -1
+        except ZeroDivisionError:
+            # Parameters not yet populated from io pins
+            return -2
+
+    def check_speed(self,io,speed):
+        """ Checks whether the speed given can be accommodated by any gear.
+            Returns -1 if the current gear can accommodate it keeping the motor
+            within limits, -2 if no gear can accommodate the speed, and a gear
+            number (0 or greater) which is the gear required to accommodate that
+            speed. Returns -3 if we can't determine the gear if the parameters 
+            haven't been populated yet.
+        """
+        # Check whether current gear will work
+        if(speed == 0.0 or (speed >= self.spindlemin(io) and 
+                speed <= self.spindlemax(io))):
+            # Gear ok for the given speed. Return -1
+            return -1
+        return self.find_gear(io,speed)
+
+    def set_gear(self,io,gearno):
+        """ Sets the current gear to gearno """
+        if(gearno >= 0 and gearno < len(io.param.ratio_gear)):
+            self.curgear = gearno
+        if(io.param.ratio_gear[self.curgear] != 0.0):
+            self.curratio = io.param.ratio_gear[self.curgear]
+
+class Spindle:
+    """ Handles changing all parameters controlled within the spindle, such as 
+        spindle speed, motor speed, active gear ratio, whether it is stopped or
+        not. Does not handle any operator or halui interface.
+        The spindle direction is handled as a separate item. In the motor
+        it is combined when sent to the IO pins.
+
+        Here is a description of some of the variables contained here. None of
+        the speed variables change when the spindle is stopped for a gear
+        change. However, these do go to zero if zero speed is commanded, either
+        progrmmatically or manually.
+
+        curspeed -- The current speed. Not zeroed if the spindle is
+            stopped, but changes whenever the spindle changes speed.
+        curdir -- The current direction. This goes with curspeed.
+        commanded_speed -- The speed last commanded, either programmatically, by
+            spindle override, or manual speed setting. This can be outside the
+            machine limits.
+        commanded_dir -- The direction of commanded_speed.
+        limited_speed -- The commanded speed, but limited by machine limits.
+            This is the speed used to set curspeed when starting the spindle.
+        limited_dir -- The dirction of the limited speed.
+        progspeed -- This is the last programmaticaly-generated speed. It
+            changes in proporation to the spindle override_in. This is not
+            limited by machine limits.
+        progdir -- The direction of progspeed.
+        progstable -- Last stable programmatically-generated speed. This is set
+            when a new programmed speed is set, but is not set for override changes.
+        progstable_dir -- The direction of progstable.
+        overridestable -- The last stable override value. This is changed to
+            match the override value whenever progstable is changed. This does not
+            change if just the override setting is changed.
+        manspeed -- The last manually-set speed. It is multiplied by the
+            override value to get commanded_speed.
+        mandir -- The direction of manspeed.
+        enabled -- Value from HALUI. Stops the motor but doesn't change any of
+            the above values.
+        stopped -- True when the spindle is to be stopped. None of the above
+            speed values change, just the motor is stopped.
+        use_pgm_speed -- If True, we are to use the programmatically-generated
+            speed, If False, use manually-generated speeds.
+
+
+        Before making a spindle speed change, a check should be made to be sure
+        it can be accommodated at all, and if so which gear is needed to do it.
+        This is done by calling the check_speed(trialspeed) method. This method
+        considers the gear currently in use and prefers that gear if the motor
+        would remain within it RPM range. This method returns -1 if the speed is
+        out of range of the machine, 0 if the current gear will accommodate the
+        new speed, or a number greater than 0 if the new speed requires a gear
+        change. In this case, the number returned is the new gear setting
+        (1-based). 
+
+        To set a new spindle speed, the set_speed(newspeed) method is provided.
+        It sets the spindle to a speed as close to the requested newspeed as
+        possible, keeping the motor within limits. This function returns True if
+        the motor is being limited, False if not. This function assumes the
+        current gear is to be used.
+    """
+    def __init__(self,numgears):
+        self.ngears = numgears
+        self.gear_mult = gear_mult
+        self.gearbox = Gearbox(self.ngears)
+        self.motor = Motor()
+        self.io = Halstuff(self.ngears,self.gear_mult)
+
+        # Speed values and other parameters that don't map directly to
+        # io.outpins. See descriptions above for speed-related values.
+        self.curspeed = 0.0
+        self.curdir = 1 
+        self.commanded_speed = 0.0
+        self.commanded_dir = 1
+        self.limited_speed = 0.0 
+        self.limited_dir = 1
+        self.progspeed = 0.0 
+        self.progdir = 1
+        self.progstable = 0.0
+        self.progstable_dir = 1
+        self.overridestable = 0.0
+        self.manspeed = 0.0
+        self.enabled = False
+        self.stopped = True
+        self.use_pgm_speed = True
+
+    def update_input(self):
+        """ Performs updates which are due to changes in value of input pins and
+            parameters, and writes the output pins. Does not do spindle speed 
+            changes or gear changes.
+        """
+        self.update_input(self.io)
+        self.gearbox.update_input(self.io)
+        self.motor.update_input(self.io)
+
+    def update_outputs(self):
+        """ Updates any pertinent output pins """
+        self.io.outpin.enable_out = self.enabled 
+        self.gearbox.update_output(self.io)
+        self.motor.update_output(self.io)
+        # Update all the hal output pins
+        self.io.update_outputs()
+
+    def update_speed(self,speed,direction):
+        """ Sets curspeed, curdir, commanded_speed, commanded_dir,
+            limited_speed, limited_dir from program-generated or
+            manually-generated speeds, depending on self.use_pgm_speed
+        """
+        if(self.use_pgm_speed):
+            # Program-generated speed
+            self.commanded_speed = self.progspeed
+            self.commanded_dir = self.limited_dir = self.progdir
+            self.limited_speed = gearbox.speed_limiter(self.progspeed)
+        else:
+            # Manual speed
+            self.commanded_speed = self.manspeed
+            self.commanded_dir = self.limited_dir = self.mandir
+            self.limited_speed = gearbox.speed_limiter(self.manspeed)
+
+    def speed_change_pending(self):
+        """ Used to interrupt feed while a manual speed change occurs. """
+        io.outpin.at_speed = False
+
+    def speed_change_done(self):
+        """ Used to allow feed to continue after a manual speed change. """
+        io.outpin.at_speed = True
+
+    def hold_feed(self):
+        """ Holds feed while a manual spindle speed change is pending. """
+        io.outpin.feed_hold = True
+
+    def allow_feed(self):
+        """ Releases feed hold """
+        io.outpin.feed_hold = False
+
+    def test_speed(self,speed):
+        """ Returns True if the speed given can be accommodated by the current
+            gear. speed is assumed bipolar, and zero speed is acceptable.
+        """
+        return self.gearbox.check_speed(io,speed)
+
+    def check_man_speed_change(self):
+        """ Checks the io pins for possible manual spindle speed change. This
+            occurs when io.inpin.mspeed_set is True, io.inpin.use_man_speed is True,
+            and io.inpin.mspeed_in is the same as io.prev.mspeed_in (the previous
+            value), but different than self.manspeed (the last manual speed
+            commanded). Does no validity checking. Does not change the value of
+            self.manspeed. That value is changed after validity checking and
+            possible communication with the operator. Returns the new manual speed,
+            or None if no new manual speed was set.  
+        """
+        # Set the value of use_pgm_speed.
+        self.use_pgm_speed = not io.inpin.use_man_speed
+        if(io.inpin.mspeed_set and io.inpin.use_man_speed and
+                (io.inpin.mspeed_in == io.prev.mspeed_in) and 
+                (io.inpin.mspeed_in != self.manspeed)):
+            return io.inpin.mspeed_in
+        else:
+            return None
+
+    def check_pgm_speed_change(self):
+        """ Checks hal inputs for a programmed (gcode) spindle speed change.
+            This is detected as a change in io.inpin.sspeed_in from self.progspeed
+            and that io.inpin.sspeed_in is the same as the previous value
+            (io.prev.sspeed_in). We ignore speed changes that result from the
+            override being changed. A tolerance limit is used to check that the
+            change in programmed spindle speed is tracking the override. Both
+            has to be stable since the previous cycle, to avoid race conditions.
+            Returns the new speed (with polarity) if a new
+            speed is seen, or None if there is no change in programmed speed.
+        """
+        # First determine the current ratio between sspeed_in and the
+        # override_in
+        if(io.inpin.sspeed_in == io.prev.sspeed_in and 
+                io.inpin.override_in == io.prev.override_in):
+            try:
+                tmp = self.overridestable / self.progstable
+                if(io.inpin.sspeed_in >= 0):
+                    pol = 1
+                    tmp1 = io.inpin.sspeed_in / io.inpin.override_in * tmp
+                else:
+                    pol = -1
+                    tmp1 = -io.inpin.sspeed_in / io.inpin.override_in * tmp
+            except ZeroDivisionError:
+                # Probably due to not-yet-populated hal pins
+                return None
+            if((tmp1 < 1.0 and tmp1 < RATIO_TOL_LOWER) or
+                    (tmp1 > 1.0 and tmp1 > RATIO_TOL_UPPER) or 
+                    (pol != self.progstable_dir)):
+                # Outside the tolerance band. Must be a new speed. Save the
+                # values as stable ones, and return the new speed. There is no
+                # need to save the stable values unless we find a speed change,
+                # as the ratios will still work.
+                self.progstable_dir = pol
+                self.progstable = pol * io.inpin.sspeed_in # progstable is always positive
+                self.overridestable = io.inpin.override_in
+                return io.inpin.sspeed_in
+        # No valid speed change
+        return None
+
+    def spindlemax(self):
+        """ Returns the maximum spindle speed for the current gear
+        """
+        if(self.gearbox.curratio != 0.0):
+            return self.io.param.motor_max / self.gearbox.curratio
+        else:
+            return 0.0
+
+    def spindlemin(self):
+        """ Returns the minimum spindle speed for the current gear
+        """
+        if(self.gearbox.curratio != 0.0):
+            return self.io.param.motor_min / self.gearbox.curratio
+        else:
+            return 0.0
+
+    def is_stopped(self):
+        """ Returns True if stopped, False otherwise
+        """
+        return (curspeed == 0.0)
+
+    def stop(self):
+        """ Stops the spindle """
+        self.curspeed = 0.0
+        self.stopped = True
+
+    def start(self):
+        """ Starts the spindle, if enabled upstream """
+        if(self.enabled):
+            self.curspeed = self.commanded_speed
+            self.stopped = False
+        else:
+            self.curspeed = 0.0
+
+    def set_speed(self,speed):
+        """ Does the setup required to go to the given speed. If needed, stops the spindle
+            and sets up for the gear, but does not start the spindle. This 
+            should be followed by a start_spindle() call once the gear box
+            is set to the new gear
+        """
+        if(not self.stopped):
+            self.stop_spindle(self.io)
+        self.spindle.set_speed(speed,self.io)
+
+    def get_gear(self):
+        """ Returns the current gear number. -1 indicates gear is unknown. """
+        return self.gearbox.curgear
+
+    def set_gear(self,gearno):
+        """ Sets the gearno in the gearbox. Doesn't do anything else such as
+            updating the io output or starting the spindle
+        """
+        self.gearbox.set_gear(self.io,gearno)
+
+    def check_pgm_speed_change(self):
+        """ Checks io pins for a program-originated spindle speed change. This
+            is a programmed speed (Snnn in gcode), which comes in 
+            via io.inpin.sspeed. If a new speed is seen, returns the new speed.
+            Otherwise, returns None. 0.0 is valid if the new speed is to stop the
+            spindle. Ignores speed changes due to override.
+        """
+
+    def check_manual_speed_change(self):
+        """ Checks io pins for a manual spindle speed change. This is 
+            specified in io.inpin.mspeed, and is latched via io.inpin.mspeed_set.
+            Returns the new speed, or None if no new speed was requested.
+            Considers 0.0 as a valid new speed. Ignores speed changes due to override.
+        """
+
+def check_cmd_args():
+    errstr1 = (("%s must be called with ngears=N as the first argument and\n"
+                "multiple_select=1 (or 0) as the second argument\n") % sys.argv[0]))
+    errstr2 = (("%s must be called with ngears=N as the first argument and\n"
+                "multiple_select=1 (or 0) as the second argument\n") % sys.argv[0])
+    errstr3 = (("Invalid Number of Gears argument (%s) passed to %s. Must be "
+                "between 1 and 15\n") % (sys.argv[1],sys.argv[0]))
+    errstr4 = (("%s must be called with ngears=N as the first argument and\n"
+                "multiple_select=1 (or 0) as the second argument\n") % sys.argv[0])
+    if(len(sys.argv) < 3):
+        sys.stderr.write(errstr1)
+        sys.exit(EXIT_ERROR)
+
+    for arg in sys.argv:
+        (keyword,value) = arg.split("=")
+        if(not len(keyword) or not len(value)):
+            sys.stderr.write(errstr2)
+            sys.exit(EXIT_ERROR)
+        keyword = keyword.lower()
+        if(keyword == "ngears"):
+            try:
+                ngears = int(value)
+            except:
+                sys.stderr.write(errstr3)
+                sys.exit(EXIT_ERROR)
+            if((ngears < 1 or ngears > 15):
+                sys.stderr.write(errstr3)
+                sys.exit(EXIT_ERROR)
+        elif(keyword == "multiple_select"):
+            if(value == "1"):
+                gear_mult = True
+            elif(value == "0"):
+                gear_mult = False
+            else:
+                sys.stderr.write(errstr3)
+                sys.exit(EXIT_ERROR)
+        else:
+            sys.stderr.write(errstr4)
+            sys.exit(EXIT_ERROR)
+    return (ngears,gear_mult)
+
+def hal_pin_setup():
+    ################## Sets up HAL pins and parameters ################
+    # Input Pins
+    h.newpin("sspeed-in", hal.HAL_FLOAT, hal.HAL_IN) # desired spindle speed in RPM from motion
+    h.newpin("mspeed-in", hal.HAL_FLOAT, hal.HAL_IN) # manual spindle speed in RPM from operator via pyvcp
+    h.newpin("use-man-speed", hal.HAL_BIT, hal.HAL_IN) # use operator spindle speed (vs from axis), from pyvcp
+    h.newpin("speed-change-notice", hal.HAL_BIT, hal.HAL_IN) # Operator desires notice of future programmed speed changes
+    h.newpin("mspeed-set", hal.HAL_BIT, hal.HAL_IN) # set mspeed-in as the new requested speed
+    h.newpin("enable-in", hal.HAL_BIT, hal.HAL_IN) # spindle enable from motion
+    h.newpin("is-stopped", hal.HAL_BIT, hal.HAL_IN) # stopped indication from spindlemotor.comp
+    h.newpin("override-in", hal.HAL_FLOAT, hal.HAL_IN) # spindle speed override, from halui
+    h.newpin("help-request", hal.HAL_BIT, hal.HAL_IN) # User has requested the help dialog
+    h.newpin("gear-man-auto", hal.HAL_BIT, hal.HAL_IN) # Toggle between auto and manual gear selection
+    h.newpin("set-gear", hal.HAL_BIT, hal.HAL_IN) # use operator-selected gear, from pyvcp
+    if(gear_mult):
+        # use either gear-no-in or one of gear-selectedn.
+        for gearno in range(ngears):
+            h.newpin("gear-select%d"%(gearno+1),hal.HAL_BIT,hal.HAL_IN)
+    else:
+        h.newpin("gear-no-in", hal.hal_s32, hal.HAL_IN) # Operator-specified gear number (1-10)
+
+    # Output Pins
+    h.newpin("gear-no-out", hal.HAL_S32, hal.HAL_OUT) # gear number in use, to pyvcp
+    h.newpin("gear-ratio-out", hal.HAL_FLOAT, hal.HAL_OUT) # ratio of gear in use, to spindlemotor.comp
+    h.newpin("motor-speed-out", hal.HAL_FLOAT, hal.HAL_OUT) # Motor speed in RPM (pos == CW, neg == CCW) to spindlemotor.comp
+    h.newpin("enable-out", hal.HAL_BIT, hal.HAL_OUT) # spindle enable output to spindlemotor.comp
+    h.newpin("sspeed-error", hal.HAL_BIT, hal.HAL_OUT) # spindle speed error?
+    h.newpin("at-speed-out", hal.HAL_BIT, hal.HAL_OUT) # True if no pending speed changes
+    h.newpin("mspeed-limit", hal.HAL_BIT, hal.HAL_OUT) # motor speed is being limited
+    h.newpin("man-gear", hal.HAL_BIT, hal.HAL_OUT) # Manual gear selection, to LED
+    h.newpin("auto-gear", hal.HAL_BIT, hal.HAL_OUT) # Automatic gear selection, to LED
+    h.newpin("stop-pgm", hal.HAL_BIT, hal.HAL_OUT) # Command to halui to stop the program
+    h.newpin("feed-hold", hal.HAL_BIT, hal.HAL_OUT) # Command to motion to hold the feed while changing speed or gears
+
+    # Spindle-speed range outputs for each gear, and set of LEDs to indicate the gear
+    for gearno in range(ngears):
+        h.newpin("srpm-min-gear%d"%(gearno+1),hal.HAL_FLOAT,hal.HAL_OUT)
+        h.newpin("srpm-max-gear%d"%(gearno+1),hal.HAL_FLOAT,hal.HAL_OUT)
+        h.newpin("cur-gear%d"%(gearno+1),hal.HAL_FLOAT,hal.HAL_OUT) # One is true, the currently-selected gear
+
+    # For debugging
+    #h.newpin("gear-lower-limit", hal.HAL_FLOAT, hal.HAL_OUT) # Lower spindle speed limit for current gear
+    #h.newpin("gear-upper-limit", hal.HAL_FLOAT, hal.HAL_OUT) # Upper spindle speed limit for current gear
+    #h.newpin("unlimited-motor", hal.HAL_FLOAT, hal.HAL_OUT) # Motor speed before limiting
+
+    # Parameters
+    for gearno in range(ngears):
+        h.newparam("ratio-gear%d"%(gearno+1),hal.HAL_FLOAT, hal.HAL_RW)
+    h.newparam("motor-max",hal.HAL_FLOAT,hal.HAL_RW) # Motor maximum speed
+    h.newparam("motor-min",hal.HAL_FLOAT,hal.HAL_RW) # Motor minimum speed
+    h.newparam("motor-nom",hal.HAL_FLOAT,hal.HAL_RW) # Motor nominal speed
+    ################## End of HAL pins and parameters ################
+    h.ready()
+
+
+def get_motor_speed(spindle_speed,gear_no):
+    """ Returns a tuple of (motor_speed_out, motor_limited), for the given
+        spindle speed and current gear 
+    """
+    if(gear_no == 0):
+        ratio = 0
+    else:
+        ratio = h["ratio-gear%d"%(gearno)]
+    motor_speed_out = spindle_speed * ratio
+    unlimited_motor = motor_speed_out
+    motor_limited = False
+    if(motor_speed_out > h["motor-max"]):
+        motor_speed_out = ratio * h["motor-max"]
+        motor_limited = True
+    if(motor_speed_out < h["motor-min"]):
+        motor_speed_out = ratio * h["motor-min"]
+        motor_limited = True
+    return(motor_speed_out,motor_limited,unlimited_motor)
+
+def save_previous(state):
+    """ Saves the previous value of selected inpins.
+    """
+    for key in ["sspeed-in","override-in","mspeed-in"]:
+        previous[key] = inpin[key]
+    previous["state"] = state
+
+def latch_input_pins():
+    """ Captures the value of each input pin to the inpin dictionary
+    """
+    for key in inpin.keys():
+        inpin[key] = h[key]
+
+def update_output_pins()
+    """ Sets the output hal pins to their stored values
+    """
+    for key,val in outpins.iteritems()
+        h[key] = val
+
+def check_spindle_speed():
+    """ Checks the spindle speed for changes. A spindle-speed change will occur
+        when the override was changed, when the spindle is being stopped,
+        when a new manual spindle speed is being commanded, or when the
+        gcode commanded it. In any case we determine whether we need to check
+        for a possible gear change. Returns a boolean, for whether 
+        a speed change worthy of gear change has occurred.
+    """
+
+    # Check for manual or programmed spindle speed changes. A manual change is
+    # when the mspeed-set button is pressed with a new mspeed-in value. A
+    # programmed change is when the sspeed-in input pin changes but not by the
+    # same amount as the override-in pin. This forces override adjustments to
+    # not be subject to gear changes
+    if(inpin["mspeed-set"] and (inpin["mspeed-in"] != previous["mspeed-in"])):
+        if(inpin["mspeed-in"] > 0.0): 
+            # Ignore zero speed
+            control["spindle-speed"] = inpin["mspeed-set"]
+            stable["mspeed-in"] = inpin["mspeed-set"]
+            return True
+    else:
+        # Check for spindle speed changes
+        if(inpin["sspeed-in"] != previous["sspeed-in"]):
+            if(inpin["sspeed-in"] == 0.0 or not inpin["enable-in"]):
+                # We ignore zero speed
+                return False
+            # Check for just an override change, but trap divide-by-zero error
+            try:
+                tmp = inpin["sspeed-in"] / stable["sspeed-in"] / 
+                            inpin["override-in"] * stable["override-in"]
+            except ZeroDivisionError:
+                # One of the dividends was zero. Input pins are probably still being
+                # intialized, so do nothing
+                return False
+            if((tmp < 1.0 and tmp < RATIO_TOL_LOWER) or 
+                    (tmp > 1.0 and tmp > RATIO_TOL_UPPER)): 
+                # Speed change not due to spindle override.
+                control["spindle-speed"] = inpin["sspeed-in"]
+                stable["sspeed-in"] = inpin["sspeed-in"]
+                return True
+
+def check_gear_change():
+    """ Checks the gear settings against spindle speed to see if the gear needs
+        to be changed. This happens if the spindle speed would force the motor to be
+        out of its speed range using the current gear or if the operator chooses to
+        use a new gear. If a gear change is required, True is returned. 
+        Otherwise, returns False. The rest of the gear change 
+        operation is controlled by the do_gear_change() function
+    """
+    # We need to start a speed change operation. First, determine if we need to
+    # change gears.
+    try:
+        new_motorspeed = control["spindle-speed"] / h["ratio-gear%d"%(new_gear)]
+    except ZeroDivisionError:
+        return False
+    if(new_motorspeed < h["motor-min"] or new_motorspeed > h["motor-max"]):
+        if(find_new_gear(control["spindle-speed"])):
+            return True
+        else:
+            # Didn't find a suitable gear
+            operator_prompt(PROMPT_NO_GEAR)
+            return False
+    else:
+        return False
+
+def find_new_gear(newspeed):
+    """ Determines a new gear. The optimum gear is found by finding the ratio
+        that puts the motor closest to its nominal speed. If no gear can be
+        found that keeps the motor within range, or if not all parameters are
+        yet populated, returns False. Otherwise sets control["new-gear"] to the
+        new gear and returns True.
+    """
+    speedratio = 1e9  # very large number
+    # Trap divide-by-zero errors that will happen if the parameters aren't 
+    #  yet populated.
+    try:
+        for gearno in range(1,control["ngears"]+1):
+            trialratio = newspeed * h["ratio-gear%d"%(gearno)] / h["motor-nom"]
+            if(trialratio < 1.0):
+                trialratio = 1 / trialratio
+            if(trialratio < speedratio):
+                speedratio = trialratio
+                new_gear = gearno
+            # We've got the gear with the ratio closest to running the motor at nominal speed.
+            # Check that it's within the motor limits
+            new_motorspeed = newspeed / h["ratio-gear%d"%(new_gear)]
+        if(new_motorspeed < h["motor-min"] or new_motorspeed > h["motor-max"]):
+            # The closest wasn't close enough
+            return False
+        else:
+            control["new-gear"] = new_gear
+            return True
+    except ZeroDivisionError:
+        return False
+
+def do_gear_change():
+    """ Stops the spindle by setting control["motorspeed"] to zero. When the spindle is 
+        stopped, puts up an operator prompt with instructions to change the gear to 
+        control["new-gear"]. The operator is asked to acknowledge the change.
+        The operator is also given options to choose another gear or to halt the
+        gcode program. All of that is handled here.
+    """
+    # Substates 
+    SUBSTATE_NORMAL = 0
+    SUBSTATE_WAIT_OPERATOR = 1
+    SUBSTATE_CHOOSE_GEAR = 2
+
+    if(state_changed):
+        control["motorspeed"] = 0.0
+        do_gear_change.substate = SUBSTATE_NORMAL
+    else:
+        if(do_gear_change.substate == SUBSTATE_NORMAL):
+            if(inpin["is-stopped"]):
+                # Spindle now stopped. Put up the operator prompt
+                operator_prompt(PROMPT_NEW_GEAR,control["new-gear"])
+                do_gear_change.substate = SUBSTATE_WAIT_OPERATOR
+        elif(do_gear_change.substate == SUBSTATE_WAIT_OPERATOR):
+            reply = check_reply()
+            if(reply == REPLY_1):
+                # The operator has replied they accept the gear
+
+            elif(reply == REPLY_2):
+                # The operator wants to choose their own gear
+                do_gear_change.substate = SUBSTATE_CHOOSE_GEAR
+            elif(reply == REPLY_3):
+                # Cancel the running program. This will stop the action
+                control["stop-program"] = True
+        elif(do_gear_change.substate == SUBSTATE_CHOOSE_GEAR):
+
+# Initialize the static variable for do_gear_change.
+do_gear_change.substate = 0
+
+
+
+############### Main Program #################
+# Command-line arguments specify the number of the gears and whether gear
+# selection is by one numeric value or by selecting a bit pin for each possible
+# gear. The command-line arguments should use the keywords "ngears" and
+# either "multiple_select", like this:
+#   hal_spindlemanager ngears=10 multiple_select=1
+
+(ngears,gear_mult) = check_cmd_args()
+
+
+
+# Machine states
+STATE_INVALID = 0
+STATE_RUNNING = 1
+STATE_CHANGE_GEAR = 2
+
+# Set up the hal components for this program
+h = hal.component("hal_spindlemanager")
+hal_pin_setup()
+
+# Our spindle instance
+spindle = Spindle(ngears,gear_mult)
+prev_state = STATE_INVALID
+state = STATE_RUNNING
+
+# This try: is so we can be closed by upstream issuing a KeyboardInterrupt 
+try:
+    while 1:
+
+        """ The main loop here captures input pins, checks for manual gear
+            changes, speed changes, and updates the output pins.
+        """
+        state_changed = (state != prev_state))
+        spindle.update_input()
+
+        newgear = spindle.check_man_gear_change()
+        if(newgear != None and newgear >= 0):
+            # There is a new manual gear. Display the dialog for the operator to
+            # change the gear. Respond to the results of that, to either accept
+            # the change or to keep the current gear.
+
+        newspeed = spindle.check_pgm_speed_change()
+        if(newspeed != None):
+            # Programmed spindle speed change. See if it is within limits and if
+            # it requires a gear change
+            if(spindle.test_speed(newspeed)):
+                # No gear change. Just set the new speed
+                spindle.set_pgm_speed(newspeed)
+
+        newspeed = spindle.check_man_speed_change()
+        if(newspeed != None):
+            # Manual speed change. See if it requires a gear change
+            if(spindle.test_speed(newspeed)):
+
+
+        if(control["state"] == STATE_RUNNING):
+            if(check_spindle_speed() and check_gear_change()):
+                control["state"] = STATE_CHANGE_GEAR
+        elif(control["state"] == STATE_CHANGE_GEAR):
+            do_gear_change()
+        if(control["state"] == STATE_RUNNING):
+            set_motor_speed()
+        else:
+            check_operator_reply()
+        spindle.update_outputs()
+
+
+
+
+
+
+
+        # Save prior cycle values
+        prev_speed = sspeed
+        prev_override = override
+
+        # Capture incoming pins here so they're a bit more atomic
+        selected_gear = h["gear-no-in"]
+        sspeed = h["sspeed-in"]
+        enabled = h["enable-in"]
+        stopped = h["is-stopped"]
+        override = h["override-in"]
+
+        # Out-of-range protection
+        if(selected_gear < 0):
+            selected_gear = 0
+        elif(selected_gear > ngears):
+            selected_gear = ngears
+
+        # We store the direction, work with unipolar speeds, then restore it at
+        #  the end.
+        direction_cw = (sspeed >= 0)
+        if(sspeed < 0):
+            sspeed = -sspeed
+
+        state_changed = (prev_state != state)
+        prev_state = state
+        if(state == STATE_RUNNING): # Check for speed changes.
+            if(h["use-man-speed"]):
+                if(h["mspeed-set"]):
+                    man_speed = h["mspeed-in"]
+                    if(man_speed == 0.0):
+                        h["motor-speed-out"] = 0.0
+                    else:
+                        if(man_speed != prev_stable_speed): # avoid multiple detections
+                            # Set current and previous speeds so we start fresh
+                            #  with this speed.
+                            speed_change = True
+                            new_speed = man_speed
+                            prev_stable_speed = man_speed
+            else: # Automatic speed change detection.
+                if(not enabled or sspeed == 0.0):
+                    # Special case: zero speed
+                    motor_speed_out = 0.0
+                    motor_limited = False
+                else: # Not zero speed, check for speed change
+                    if(sspeed == prev_speed and prev_speed != prev_stable_speed):
+                        prev_ratio = sratio
+                        if(override == 0.0): # Trap divide by zero
+                            sratio = 0.0
+                        else:
+                            sratio = sspeed / override
+                        if(prev_ratio == sratio and (sratio > ratio_upper_limit or sratio < ratio_lower_limit)):
+                            # New speed change not due to spindle override
+                            new_speed = sspeed
+                            prev_stable_speed = new_speed
+                            speed_change = True
+                            # Set new limits for testing
+                            ratio_upper_limit = sratio * RATIO_TOL_UPPER
+                            ratio_lower_limit = sratio * RATIO_TOL_LOWER
+                        else:
+                            # Speed has changed due to override.
+                            (motor_speed_out,motor_limited,unlimited_motor) = get_motor_speed(sspeed,cur_gear)
+
+            if(h["use-man-gear"] and (selected_gear != cur_gear)):
+                # Using manual gear, just set up that gear and set the motor speed.
+                cur_gear = selected_gear
+                (motor_speed_out,motor_limited,unlimited_motor) = get_motor_speed(sspeed,cur_gear)
+
+            if(speed_change):
+                speed_change = False
+                # Evaluate for possible gear change. If gear has not been set, it must be done now.
+                # Check the new desired spindle speed to see if it can be accommodated with
+                #  the current gear. If so, use it and set the new motor speed
+                (new_motorspeed,tmp,unlimited_motor) = get_motor_speed(sspeed,cur_gear)
+                if(not tmp and cur_gear > 0):
+                    motor_speed_out = new_motorspeed
+                else:
+                    state = STATE_GEAR_CHANGE
+
+        elif(state == STATE_GEAR_CHANGE):
+            if(state_changed):
+                # Stop the spindle to change gears
+                motor_speed_out = 0.0
+
+                # Find optimum gear. Check motor speed for each gear and find the one closest to MOTOR_NOM
+                # This result in cur_gear being the new gear. Everywher else the
+                # gearno is numbered from 1 through 10 (or whatever), but here
+                # the for loop goes from 0 through 9.
+                speedratio = 1e9  # very large number
+                for gearno in range(ngears):
+                    if(h["motor-nom"] == 0.0): # Trap divide by zero
+                        trialratio = 1.0
+                    else:
+                        if(gearno == 0):
+                            trialratio = 0.0
+                        else:
+                            if(h["motor-nom"] == 0.0):
+                                trialratio = 0
+                            else:
+                                trialratio = new_speed * h["ratio-gear%d"%(gearno)] / h["motor-nom"]
+                                if(trialratio > 0.0 and trialratio < 1.0):
+                                    trialratio = 1 / trialratio
+                    if(trialratio < speedratio):
+                        speedratio = trialratio
+                        new_gear = gearno + 1
+                # We've found the gear with the ratio closest to running the motor at nominal speed.
+                # Check that it's within the motor limits
+                if(new_gear == 0): # Trap divide by zero
+                    new_motorspeed = 0.0
+                else:
+                    ratio = h["ratio-gear%d"%(new_gear)]
+                    if(ratio == 0.0):
+                        new_motorspeed = 0.0
+                    else:
+                        new_motorspeed = new_speed / ratio
+                if(new_motorspeed < h["motor-min"] or new_motorspeed > h["motor-max"]):
+                    # The closest wasn't close enough
+                    sspeed_error = True
+                    cur_gear = 0
+                else:
+                    cur_gear = new_gear
+                    sspeed_error = False
+
+            if(stopped):
+                # This is where we would prompt for the new gear and stay in
+                # that state until the user changes it. For now, just set the new motor speed
+                # and go back to the STATE_RUNNING state.
+                #state = STATE_USER_WAIT
+                (motor_speed_out,motor_limited,unlimited_motor) = get_motor_speed(new_motorspeed,cur_gear)
+                state = STATE_RUNNING
+
+        # Set the output pins each cycle
+        h["gear-no-out"] = cur_gear
+        if(cur_gear == 0):
+            h["gear-ratio-out"] = 0.0
+            h["gear-lower-limit"] = 0.0
+            h["gear-upper-limit"] = 0.0
+        else:
+            ratio = h["ratio-gear%d"%(cur_gear)]
+            h["gear-ratio-out"] = ratio
+            if(ratio == 0.0): # Avoid divide by zero errors
+                h["gear-lower-limit"] = 0.0
+                h["gear-upper-limit"] = 0.0
+            else:
+                h["gear-lower-limit"] = h["motor-min"] / ratio
+                h["gear-upper-limit"] = h["motor-max"] / ratio
+        if(direction_cw):
+            h["motor-speed-out"] = motor_speed_out
+        else:
+            h["motor-speed-out"] = -motor_speed_out
+        h["enable-out"] = enabled
+        h["sspeed-error"] = sspeed_error
+        h["mspeed-limit"] = motor_limited
+        h["state-out"] = state
+        h["unlimited-motor"] = unlimited_motor
+        # Output the gear ranges for the display panel. These arrays are
+        # zero-based by gearno
+        for gearno in range(ngears):
+            ratio = h["ratio-gear%d"%(gearno+1)]
+            if(ratio == 0.0):
+                h["srpm-min-gear%d"% (gearno+1)] = 0.0
+                h["srpm-max-gear%d"% (gearno+1)] = 0.0 else:
+                h["srpm-min-gear%d"% (gearno+1)] = h["motor-min"] / ratio
+                h["srpm-max-gear%d"% (gearno+1)] = h["motor-max"] / ratio
+
+        # 100ms cycle time
+        time.sleep(0.100)
+
+# Allows terminating. Something raises a KeyboardInterrupt 
+#  when they want us to quit.
+except KeyboardInterrupt:
+    pass

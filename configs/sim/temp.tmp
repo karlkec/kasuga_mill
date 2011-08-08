@@ -1,0 +1,23 @@
+h.newpin("sspeed-in", hal.HAL_FLOAT, hal.HAL_IN) # desired spindle speed in RPM from motion            
+h.newpin("mspeed-in", hal.HAL_FLOAT, hal.HAL_IN) # manual spindle speed in RPM from operator via pyvcp 
+h.newpin("use-man-speed", hal.HAL_BIT, hal.HAL_IN) # use operator spindle speed (vs from axis), from pyvcp
+h.newpin("mspeed-set", hal.HAL_BIT, hal.HAL_IN) # set mspeed-in as the new requested speed             
+h.newpin("use-man-gear", hal.HAL_BIT, hal.HAL_IN) # use operator-selected gear, from pyvcp             
+h.newpin("gear-no-in", hal.HAL_S32, hal.HAL_IN) # operator specified gear number (1-10), from pyvcp    
+h.newpin("enable-in", hal.HAL_BIT, hal.HAL_IN) # spindle enable from motion
+h.newpin("is-stopped", hal.HAL_BIT, hal.HAL_IN) # stopped indication from spindlemotor.comp            
+h.newpin("override-in", hal.HAL_FLOAT, hal.HAL_IN) # spindle speed override, from halui
+h.newpin("help-request", hal.HAL_BIT, hal.HAL_IN) # User has requested the help dialog
+
+h.newpin("gear-no-out", hal.HAL_S32, hal.HAL_OUT) # gear number in use, to pyvcp                       
+h.newpin("gear-ratio-out", hal.HAL_FLOAT, hal.HAL_OUT) # ratio of gear in use, to spindlemotor.comp    
+h.newpin("motor-speed-out", hal.HAL_FLOAT, hal.HAL_OUT) # Motor speed in RPM (pos == CW, neg == CCW) to spindlemotor.comp
+h.newpin("enable-out", hal.HAL_BIT, hal.HAL_OUT) # spindle enable output to spindlemotor.comp
+h.newpin("sspeed-error", hal.HAL_BIT, hal.HAL_OUT) # spindle speed error?                              
+h.newpin("mspeed-limit", hal.HAL_BIT, hal.HAL_OUT) # motor speed is being limited
+
+# For debugging
+h.newpin("state-out",hal.HAL_S32, hal.HAL_OUT) # state                                                 
+h.newpin("gear-lower-limit", hal.HAL_FLOAT, hal.HAL_OUT) # Lower spindle speed limit for current gear  
+h.newpin("gear-upper-limit", hal.HAL_FLOAT, hal.HAL_OUT) # Upper spindle speed limit for current gear  
+h.newpin("unlimited-motor", hal.HAL_FLOAT, hal.HAL_OUT) # Motor speed before limiting

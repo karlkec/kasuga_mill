@@ -1,0 +1,143 @@
+This describes the operation of the gearchange system. It consists of five components:
+1. A user-space python program.
+2. An operator notification program (python).
+3. A real-time hal component.
+4. A g-code parser looking for spindle speed changes.
+5. A portion of the pyvcp panel which serves as an operator interface.
+
+--- TO DO ----
+The spindle speed override slider in axis is integrated somehow.
+The spindle acceleration in axis should be disabled.
+---------------
+
+This system has two gear-selection modes, manual and automatic. In manual mode, the operator selects the gear
+from the pyvcp panel. An LED on that panel indicates whether the selected spindle
+speed is within range of the selected gear. In automatic mode the gear is selected based on motor
+characteristics, and the panel shows what's going on.
+
+-----------------------
+The pyvcp panel has the following buttons and indicators:
+1. A checkbox to select manual (vs automatic) gear selection. Cannot be changed when a program
+is running.
+2. A set of radio buttons (or drop-down box) to select the gear, when in manual mode. This is greyed out but shows the 
+selected gear when in automatic mode.
+3. A checkbox to select manual spindle speed control (vs. program control).
+3. A spinbox to set spindle speed when in manual mode. Greyed out but shows spindle speed when in
+automatic mode.
+4. An LED to show when the manually-selected spindle speed is out of range for the selected gear.
+5. An LED to show when the motor speed is being limited. This can happen if the motor speed was
+close to its limit and the axis spindle speed slider was moved.
+
+-----------------------
+The user-space python program:
+
+1. When the system is in automatic mode, the user-space python program  When found, it does the following:
+
+	A. Manual speed setting is used when use-man-speed is TRUE. Otherwise,
+spindle speed is determined from motion.
+
+	B. Manual gear-setting mode is determined by the state of the use-man-gear
+input pin. Otherwise, the needed gear is calculated.
+
+	C. In automatic spindle-speed mode, monitors for spindle-speed changes. A
+speed change is determined when the ratio of motion.spindle-speed-out to
+halui.spindle-override.value is stable for two or more consecutive cycles, but
+is different by more than 0.1% from the previous ratio. This allows changes to
+the spindle override to be made without changing gears (but still subject to
+motor speed limits). If the ratio is stable but has changed by more than 0.1%
+from the previous stable value, the new speed is evaluated for possibly needing
+a gear change.
+
+	D. In manual spindle speed mode, a new speed is accepted when the
+mspeed-set input is TRUE and mspeed-in is different than the last time
+mspeed-set was TRUE.
+
+	E. When a new spindle speed is seen, a determination is made whether it can
+be accommodated with the current gear setting (keeping the motor between min
+and max). If so, no gear change is called for and the motor speed is adjusted
+to meet the new speed.
+
+	F. If the new spindle speed cannot be accommodated and the gear setting is
+in manual mode, a dialog advises the user of such and asks if they want to
+change gears. The dialog also indicates what the nearest speed is that can be
+made using the same gear, keeping the limits of motor speed.
+
+	G. If the operator answer YES (change gears), the spindle is stopped and
+the gear change dialog for the needed gear is presented. The spindle is then
+started with the new motor speed.
+
+	H. If the answer is NO (keep the old gear), the motor speed is changed to
+the limit that produces a spindle speed closest to what is needed and the
+mspeed-limit output is set TRUE.
+
+	I. If in automatic mode, it determines whether a gear change is necessary
+by evaluating the new spindle speed request against motor speed ranges and gear
+ratios. If the new spindle speed is zero, no gear change is performed.
+
+	C. If the spindle speed request is out of range of the machine in any gear,
+it presents a dialog asking the user whether to use the closest avaiable
+machine speed. If the user agrees, continues that way. If not, halts the
+program.
+
+	E. When speed is zero, issues an operator prompt to change the gear.
+
+	F. If the operator acknowledges the gear change, sets the motor speed to
+the new setting. If the operator requests to revert to manual spindle control,
+sets the appropriate hal pins and continues in manual mode.
+	
+	Input pins are:
+		sspeed-in  -- desired spindle speed in RPM from motion
+		mspeed-in -- manual spindle speed in RPM from operator via pyvcp
+		use-man-speed -- use operator spindle speed (vs from axis), from pyvcp
+		mspeed-set -- set mspeed-in as the new requested speed
+		use-man-gear -- use operator-selected gear, from pyvcp
+		gear-no -- operator specified gear number (1-10), from pyvcp
+		enable-in -- spindle enable from motion
+		is-stopped -- stopped indication from spindlemotor.comp
+		override-in -- spindle speed override, from halui
+		
+	Output pins are:
+		gear-no-out -- gear number in use, to pyvcp
+		gear-ratio-out -- ratio of gear in use, to spindlemotor.comp
+		motor-speed-out -- Motor speed in RPM (pos == CW, neg == CCW) to 
+			spindlemotor.comp
+		enable-out -- spindle enable output to spindlemotor.comp
+		sspeed-error -- spindle speed error?
+		mspeed-limit -- motor speed is being limited
+
+	Input parameters are
+		ratio-gear1 -- ratio for gear 1
+		ratio-gear2 -- ratio for gear 2
+		ratio-gear3 -- ratio for gear 3
+		ratio-gear4 -- ratio for gear 4
+		ratio-gear5 -- ratio for gear 5
+		ratio-gear6 -- ratio for gear 6
+		ratio-gear7 -- ratio for gear 7
+		ratio-gear8 -- ratio for gear 8
+		ratio-gear9 -- ratio for gear 9
+		ratio-gear10 -- ratio for gear 10
+		motor-max -- maximum motor rpm
+		motor-min -- minimum motor rpm
+		motor-nom -- nominal motor rpm
+	
+2. When the program is in manual mode, it scales spindle speed commands by the
+	manually-selected gear ratio and passes these on as motor speed. If the spindle
+	speed and gear would put the motor speed out of range, the motor speed is
+	limited and the motor-speed-limited hal pin is set.
+
+-----------------------
+The real-time hal component handles motor acceleration and deceleration limiting, sets the forward and
+reverse hal pins for the VFD, sets the BRAKE hal pin, determines at-speed and zero-speed, and
+scales spindle-revs and spindle-speed from the motor encoder.
+
+-----------------------
+The operator notification program displays the appropriate graphic and message to the operator to change
+gears, and asks whether to go to manual spindle control mode. Returns an exit code depending on the 
+operator response.
+
+-----------------------
+The g-code parser looks at the program to be run and tallys any gear changes necessary. It gets the 
+number of gears and gear ratios from the appropriate hal signals. It displays the tally of
+gear changes needed in the upcoming gcode program and, if no spindle speed settings are found, 
+notifies the operator that he will need to use manual spindle speed control.
+

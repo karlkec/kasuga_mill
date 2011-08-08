@@ -1,0 +1,2 @@
+halrun -f test_spindlemanager.hal
+#sleep 2

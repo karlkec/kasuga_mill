@@ -1,0 +1,44 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<pyvcp>
+ <vbox>
+ <relief>RIDGE</relief>         
+ <bd>6</bd>
+		<label><width>1</width></label>
+		<labelframe text="Spindle"> 
+			<bd>3</bd>
+			<font>("Helvetica",11)</font>
+			<vbox>
+				<relief>RIDGE</relief>         
+				<bd>2</bd>
+				<label>
+					<text>"Spindle Speed Control"</text>
+					<font>("Helvetica",11)</font>
+				</label>
+				<hbox>
+					<scale>
+						<font>("Helvetica",16)</font>
+						<width>"25"</width>
+						<halpin>"override"</halpin>
+						<resolution>0.005</resolution>
+						<orient>HORIZONTAL</orient>
+						<initval>1.0</initval>
+						<min_>0.5</min_>
+						<max_>2.0</max_>
+					</scale>
+				</hbox>
+				<hbox>
+					<spinbox>
+						<halpin>"commanded-speed"</halpin>
+						<min_>-3000</min_>
+						<max_>3000</max_>
+						<justify>"center"</justify>
+						<resolution>50</resolution>
+						<format>"5.0f"</format>
+						<font>("Helvetica",10)</font>
+					</spinbox>
+				</hbox>
+			</vbox>
+		</labelframe>
+ </vbox>
+ 
+</pyvcp>

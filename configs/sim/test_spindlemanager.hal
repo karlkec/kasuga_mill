@@ -1,0 +1,131 @@
+# Start by running
+# halrun -f test_spindlemanager.hal
+
+loadusr -Wn pyvcp pyvcp -c pyvcp spindltestpanel.xml
+loadusr -Wn motionsim pyvcp -c motionsim motionsim.xml
+
+loadrt threads name1=servo-thread period1=1000000
+
+loadrt spindlemotor count=1
+addf spindlemotor.0 servo-thread
+loadrt mult2 count=1
+addf mult2.0 servo-thread
+
+loadrt motorsim count=1
+addf motorsim.0 servo-thread
+
+# Need a real-time component to convert user gear selection (a float) from the panel
+#  to a S32 for axis_spindlemanager.
+loadrt conv_float_s32 count=1
+addf conv-float-s32.0 servo-thread
+
+loadusr -W hal_spindlemanager 10
+loadusr -Wn spindlemanageroutput pyvcp -c spindlemanageroutput spindlemanageroutput.xml
+
+setp hal_spindlemanager.enable-in True
+setp hal_spindlemanager.help-request False
+setp hal_spindlemanager.use-man-gear True
+
+setp hal_spindlemanager.motor-max 2500
+setp hal_spindlemanager.motor-min 1000
+setp hal_spindlemanager.motor-nom 1750
+setp hal_spindlemanager.ratio-gear1  23.310
+setp hal_spindlemanager.ratio-gear2  11.669
+setp hal_spindlemanager.ratio-gear3  7.143
+setp hal_spindlemanager.ratio-gear4  5.000
+setp hal_spindlemanager.ratio-gear5  3.891
+setp hal_spindlemanager.ratio-gear6  3.300
+setp hal_spindlemanager.ratio-gear7  1.751
+setp hal_spindlemanager.ratio-gear8  1.094
+setp hal_spindlemanager.ratio-gear9  0.761
+setp hal_spindlemanager.ratio-gear10 0.583
+
+# MOtion simulation
+net user-speed <= motionsim.commanded-speed => mult2.0.in0
+net over-mult <= motionsim.override-f => mult2.0.in1
+net over-mult => hal_spindlemanager.override-in 
+net over-mult => spindlemanageroutput.override-in
+net command-speed mult2.0.out => hal_spindlemanager.sspeed-in
+net command-speed spindlemanageroutput.sspeed-in
+
+# Manual Spindle Speed settings
+net man-speed <= pyvcp.use-man-speed => hal_spindlemanager.use-man-speed
+net man-speed spindlemanageroutput.use-man-speed
+net man-sp-speed <= pyvcp.spindle-man-speed => hal_spindlemanager.mspeed-in
+net man-sp-speed => spindlemanageroutput.mspeed-in
+net man-sp-set spindlemanageroutput.mspeed-set
+
+# Display of RPM. Pick up signals on existing nets
+net spindle-vel-fb => pyvcp.spindle-rpm
+net sp-speed => pyvcp.commanded-rpm
+net sp-speed-error <= hal_spindlemanager.sspeed-error => pyvcp.sspeed-error
+net sp-speed-error => spindlemanageroutput.sspeed-error
+net motor-speed-limited <= hal_spindlemanager.mspeed-limit => pyvcp.motor-limited
+net motor-speed-limited => spindlemanageroutput.mspeed-limit
+
+# Manual gear changes
+net man-gear <= pyvcp.use-man-gear => hal_spindlemanager.use-man-gear
+net man-gear spindlemanageroutput.use-man-gear
+net man-gear-no-f <= pyvcp.man-gear-sel conv-float-s32.0.in
+net man-gear-no-s32 <= conv-float-s32.0.out => hal_spindlemanager.gear-no-in
+net man-gear-no-s32 => spindlemanageroutput.gear-no-in
+
+# If we need the gear-out for pyvcp, connect it here.
+net man-gear-out-f <= hal_spindlemanager.gear-no-out
+net man-gear-out-f => spindlemanageroutput.gear-no-out 
+
+# Feedback
+net zero-sp <= spindlemotor.0.zero-speed => hal_spindlemanager.is-stopped
+net zero-sp => spindlemanageroutput.is-stopped
+
+# Gear ranges to pyvcp, to show the operator the spindle speed ranges for each gear
+net gear1min <= hal_spindlemanager.srpm-min-gear1 => pyvcp.srpm-min-gear1
+net gear2min <= hal_spindlemanager.srpm-min-gear2 => pyvcp.srpm-min-gear2
+net gear3min <= hal_spindlemanager.srpm-min-gear3 => pyvcp.srpm-min-gear3
+net gear4min <= hal_spindlemanager.srpm-min-gear4 => pyvcp.srpm-min-gear4
+net gear5min <= hal_spindlemanager.srpm-min-gear5 => pyvcp.srpm-min-gear5
+net gear6min <= hal_spindlemanager.srpm-min-gear6 => pyvcp.srpm-min-gear6
+net gear7min <= hal_spindlemanager.srpm-min-gear7 => pyvcp.srpm-min-gear7
+net gear8min <= hal_spindlemanager.srpm-min-gear8 => pyvcp.srpm-min-gear8
+net gear9min <= hal_spindlemanager.srpm-min-gear9 => pyvcp.srpm-min-gear9
+net gear10min <= hal_spindlemanager.srpm-min-gear10 => pyvcp.srpm-min-gear10
+net gear1max <= hal_spindlemanager.srpm-max-gear1 => pyvcp.srpm-max-gear1
+net gear2max <= hal_spindlemanager.srpm-max-gear2 => pyvcp.srpm-max-gear2
+net gear3max <= hal_spindlemanager.srpm-max-gear3 => pyvcp.srpm-max-gear3
+net gear4max <= hal_spindlemanager.srpm-max-gear4 => pyvcp.srpm-max-gear4
+net gear5max <= hal_spindlemanager.srpm-max-gear5 => pyvcp.srpm-max-gear5
+net gear6max <= hal_spindlemanager.srpm-max-gear6 => pyvcp.srpm-max-gear6
+net gear7max <= hal_spindlemanager.srpm-max-gear7 => pyvcp.srpm-max-gear7
+net gear8max <= hal_spindlemanager.srpm-max-gear8 => pyvcp.srpm-max-gear8
+net gear9max <= hal_spindlemanager.srpm-max-gear9 => pyvcp.srpm-max-gear9
+net gear10max <= hal_spindlemanager.srpm-max-gear10 => pyvcp.srpm-max-gear10
+
+#*******************
+#  SPINDLE S
+#*******************
+# Connections from the motor encoder to spindlemotor
+net spindle-enc-fb <= motorsim.0.output => spindlemotor.0.actual-speed
+net spindle-enc-revs <= motorsim.0.pos => spindlemotor.0.motor-pos-in
+
+# Connections from spindlemotor to the VFD. The VFD enable input is wired TRUE,
+#  otherwise it takes a long time to coast a stop.
+net spindle-vel-output <= spindlemotor.0.output => motorsim.0.commanded-speed
+net spindle-forward spindlemotor.0.forward => motorsim.0.forward
+net spindle-reverse spindlemotor.0.reverse => motorsim.0.reverse
+
+# Parameter for spindle control
+setp spindlemotor.0.speed-tolerance 1.10
+# Zero tolerance as a fraction of nominal speed for the current gear.
+setp spindlemotor.0.zero-tolerance 0.01
+# Acceleration and deceleation in RPM/sec
+setp spindlemotor.0.accel 500
+setp spindlemotor.0.decel 500
+# Low-pass filter on encoder output.
+setp spindlemotor.0.spindle-lpf 1
+
+# And spindle motor simulation
+setp motorsim.0.accel 500
+
+loadusr halmeter
+start
+waitusr pyvcp

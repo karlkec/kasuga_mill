@@ -1,0 +1,15 @@
+halmeter -s pin spindlemotor.0.actual-speed
+halmeter         -s pin spindlemotor.0.at-speed
+halmeter        -s pin spindlemotor.0.brake
+halmeter       -s pin spindlemotor.0.commanded-speed
+halmeter      -s pin spindlemotor.0.enable-in
+halmeter     -s pin spindlemotor.0.forward
+halmeter    -s pin spindlemotor.0.gear-ratio
+halmeter   -s pin spindlemotor.0.motor-pos-in
+halmeter  -s pin spindlemotor.0.output
+halmeter -s pin spindlemotor.0.reverse
+halmeter         -s pin spindlemotor.0.spindle-pos-out
+halmeter        -s pin spindlemotor.0.spindle-rpm
+halmeter       -s pin spindlemotor.0.spindle-rpm-abs
+halmeter      -s pin spindlemotor.0.zero-speed
+
