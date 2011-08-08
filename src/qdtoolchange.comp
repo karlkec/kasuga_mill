@@ -173,7 +173,7 @@ FUNCTION(_) {
 		prev_state = cur_state;
 	} 
 
-	/* At each state other than IDLE, check for AUTO mode. If not, it's an error. */
+	/* On entering each state other than IDLE, check for AUTO mode. If not, it's an error. */
 	switch(cur_state) {
 		case STATE_IDLE: // Check toolchange_req for a new tool request.
 			if(toolchange_req) {
