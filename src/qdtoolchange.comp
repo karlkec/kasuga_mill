@@ -1,10 +1,11 @@
-component qdtoolchange "EMC HAL component to manage Data Summit Quickdraw tool changer";
+component qdtoolchange "EMC HAL component to manage Dana Summit Quickdraw tool changer";
 
 pin in bit toolchange_req "Request from M6 that a tool change is required. Normally comes from iocontrol.0.tool-change";
 pin in signed new_tool_no "The number of the desired new tool. Range is 0 to parameter turret_capacity. Normally wired to iocontrol.n.tool-prep-number";
 pin in bit qd_complete "Reset signal from the Quickdraw Tool Changer that the current operation is complete";
 pin in bit machine_on "Tell this component that a the machine is on. Normally wired to halui.machine.is-on. Used to reset error conditions";
 pin in bit qd_auto "Indication that the tool changer is in auto mode. Connected to pin 9 (+12V) of the tool changer interface connector";
+pin in bit claw_open "Indication that the claw is being held in the opon position. This, along with the qd_complete bit above, means that the hardware is finished with the tool change";
 
 pin out bit tool_in_output "Tool-In command to the tool changer. Moves the arm to the spindle";
 pin out bit tool_out_output "Tool-Out command to the tool changer. Moves the arm to the carousel";
@@ -12,93 +13,90 @@ pin out bit carousel_cw_output "Turret CW command to the tool changer. Moves the
 pin out bit carousel_ccw_output "Turret CCW command to the tool changer. Moves the carousel counterclockwise";
 pin out bit carousel_home_output "Turret Home command to the tool changer.";
 pin out bit change_ack "True when the a tool change is complete. Normally this is connected to iocontrol.0.tool-prepared";
+pin out bit is_homed "True when tool changer carousel is homed";
 
-pin out unsigned error_mask
-"""When an error occurs, bits in this output pin indicate what the error is:
-	0 -- No Error
-	1 -- Invalid new_tool_no input
-	4 -- Spindle-to-Carousel Arm Movement Timed Out
-	8 -- Carousel-to-Spindle Arm Movement Timed Out
-   16 -- qd_complete Input Stuck Low
-   32 -- qd_complete Input Stuck High
-   64 -- Carousel Movement Timed Out
-  128 -- Carousel Home Operation Timed Out
-""";
-pin out unsigned current_state "For debugging. State of the internal state machine";
-pin out unsigned current_tool "For debugging. Tool number currently in position. Will be zero until homed";
+pin out unsigned error_mask "Error Output. See description";
+pin out signed current_tool "For debugging. Tool number currently in position. Will be zero until homed";
+pin out signed current_state "For debugging. State of the internal state machine";
 
 param rw float carousel_home_timeout=45.0 "Maximum time in seconds to allow the carousel to home. Default = 45 sec";
 param rw float carousel_move_timeout=3.0 "Maximum time in seconds to allow the carousel to move one tool position. Default = 3.0 sec";
 param rw float arm_move_timeout=15.0 "Maximum time in seconds to allow for moving a tool from the carousel to or from the spindle. Default = 15 sec";
 param rw float complete_max_time=1.0 "Maximum time in seconds to allow the complete input to remain high before flagging an error. Default = 1.0 sec";
 param rw unsigned changer_capacity=24 "Max number of tools the tool changer is capable of handling. Default = 24";
-param rw float debounce_period=0.04 "Time in seconds to allow the complete input pin to settle. Default = 0.040 sec";
+param rw float debounce_period=0.04 "Time in seconds for debouncing. Default = 0.040 sec";
 
 variable short cur_state;
 variable short prev_state;
-variable short next_state;
 variable bool state_changed;
 variable float timer;
-variable float deb_accum;
-variable float auto_accum;
+variable bool claw_open_deb; // Debounced state of the claw-open input pin
 variable bool completed; // Debounced state of the complete input pin
 variable int new_tool_in;
-variable int movement_cnt; // How far and which direction to move the carousel.
 variable int move_cw; // Move the carousel CW
-variable bool homed_flag = FALSE; // Whether the tool changer carousel has been homed.
+variable bool homed_flag; // Whether the tool changer carousel has been homed.
 variable bool is_on; // Current state of machine_on
 variable int cur_pocket_no; // The tool pocket currently in position. 0 if not homed
 variable int error_outputs; // ORed error conditions
-variable bool ack_out;
-variable int state_index = 0;
-variable int state_stack[10];
-variable int STATE_STACK_DEPTH = 10;
+variable bool done;
 
 description """
-	qdtoolchange manages the Dana Summit Quickdraw tool changer.o
+qdtoolchange manages the Dana Summit Quickdraw tool changer.o
 
-	The Quickdraw tool changer hardware has five command inputs and one output
-		(RESET). The RESET output is a relay whose contacts close when the
-		previously-commanded operation is completed. The five hardware command
-		inputs are TURRET CW, TURRET CCW, TURRET HOME, TOOL IN, and TOOL OUT. In
-		addition, this component requires a connection to the +12V on the
-		M-POSITITION connector, and the GROUND pin on J7. This pair is used to
-		determine whether the tool changer front panel has been switched away from
-		the AUTO position. If this happens, this component assumes the operator may
-		have moved the carousel and so deems the hardware unhomed, which will
-		require a homing operation before any tools can be used.
-	
-	When this component gets a tool change request from iocontrol, it evaluates
-		the homed status and the new tool number. If the tool changer is not homed,
-		the changer will be homed first. If there is a tool in the spindle it will
-		be returned to the carousel at its current location, then the carousel
-		homed if needed, then the carousel will be moved to the new tool, and that
-		tool moved to the spindle.
+The \\fBQuickdraw\\fR tool changer hardware has five command inputs and one output
+(RESET). The RESET output is a relay whose contacts close when the
+previously-commanded operation is completed. The five hardware command
+inputs are TURRET CW, TURRET CCW, TURRET HOME, TOOL IN, and TOOL OUT. In
+addition, this component requires a connection to the +12V on the
+M-POSITITION connector, and the GROUND pin on J7. This pair is used to
+determine whether the tool changer front panel has been switched away from
+the AUTO position. If this happens, this component assumes the operator may
+have moved the carousel and so deems the hardware unhomed, which will
+require a homing operation before any tools can be used.
 
-	Note that since the Quickdraw tool changer cannot prepare a tool before it
-		is needed, there must be a hal loopback connection between the prepare tool
-		request and the tool_prepared answer, like this: net tool-prepare-loopback
-		iocontrol.0.tool-prepare => iocontrol.0.tool-prepared
+When this component gets a tool change request from iocontrol, it evaluates
+the homed status and the new tool number. If the tool changer is not homed,
+the changer will be homed first. If there is a tool in the spindle it will
+be returned to the carousel at its current location, then the carousel
+homed if needed, then the carousel will be moved to the new tool, and that
+tool moved to the spindle.
 
-	The operation of this component is as a state machine. It has 8 states, described here:
-	0. STATE_IDLE -- Does nothing except to monitor for a new tool request.
-	1. STATE_WAIT_COMPL_FALSE -- Waits for the debounced complete input has gone FALSE. If the time 
-		exceeds complete_max_time, issues an error.
-	2. STATE_INIT -- Entered when a new tool request is received. Does the following:
-		a. Check that the carousel has been homed. If not, home it now.
-		b. Check whether the new requested tool and the previous tool are the same. If so sets complete and 
-			returns to idle.
-		c. Check that the complete input pin is FALSE. If not, wait for it but not longer than complete_max_time
-		d. Determines how far and in which direction to move the carousel to the next desired tool.
-		e. Sets the CHANGING output to TRUE.
-		f. Starts the main timer.
-		g. Sets the next state, which depends on the input pins.
-	3. STATE_TOOL_OUT -- Issues a TOOL_OUT command to the hardware and waits for completion or timeout.
-	4. STATE_TOOL_IN -- Issues a TOOL_IN command to the hardware and waits for completion or timeout.
-	5. STATE_CAROUSEL_MOVE -- Issues carousel_cw_output or carousel_ccw_output commands to the hardare.
-		Counts complete pulses to determine when the new tool is in the active position.
-	6. STATE_CAROUSEL_HOME -- Issues a carousel_home_output command to the hardware and waits for completion or timeout.
-	7. STATE_ERROR -- Entered if an error occurs. Changes to STATE_IDLE when machine is turned from off to on.
+Note that since the Quickdraw tool changer cannot prepare a tool before it
+is needed, there must be a hal loopback connection between the prepare tool
+request and the tool_prepared answer, like this: net tool-prepare-loopback
+iocontrol.0.tool-prepare => iocontrol.0.tool-prepared
+
+When an error occurs, bits in the error-mask output pin indicate what the error is:
+0 -- No Error
+1 -- Invalid new_tool_no input
+4 -- Spindle-to-Carousel Arm Movement Timed Out
+8 -- Carousel-to-Spindle Arm Movement Timed Out
+16 -- qd_complete Input Stuck Low
+32 -- qd_complete Input Stuck High
+64 -- Carousel Movement Timed Out
+128 -- Carousel Home Operation Timed Out
+256 -- Auto Mode not Selected on Quickdraw Front Panel
+512 -- Claw Open Signal not Seen. Possible Air Pressure Problem
+
+The operation of this component is as a state machine. It has 8 states, described here:
+0. STATE_IDLE -- Does nothing except to monitor for a new tool request.
+1. STATE_WAIT_COMPL_FALSE -- Waits for the debounced complete input has gone FALSE. If the time 
+exceeds complete_max_time, issues an error.
+2. STATE_INIT -- Entered when a new tool request is received. Does the following:
+a. Check that the carousel has been homed. If not, home it now.
+b. Check whether the new requested tool and the previous tool are the same. If so sets complete and 
+returns to idle.
+c. Check that the complete input pin is FALSE. If not, wait for it but not longer than complete_max_time
+d. Determines how far and in which direction to move the carousel to the next desired tool.
+e. Sets the CHANGING output to TRUE.
+f. Starts the main timer.
+g. Sets the next state, which depends on the input pins.
+3. STATE_TOOL_OUT -- Issues a TOOL_OUT command to the hardware and waits for completion or timeout.
+4. STATE_TOOL_IN -- Issues a TOOL_IN command to the hardware and waits for completion or timeout.
+5. STATE_CAROUSEL_MOVE -- Issues carousel_cw_output or carousel_ccw_output commands to the hardare.
+Counts complete pulses to determine when the new tool is in the active position.
+6. STATE_CAROUSEL_HOME -- Issues a carousel_home_output command to the hardware and waits for completion or timeout.
+7. STATE_ERROR -- Entered if an error occurs. Changes to STATE_IDLE when machine is turned from off to on.
 """;
 
 license "GPL";
@@ -118,99 +116,124 @@ function _;
 #define ERROR_CAROUSEL_MOVE_FAIL 0x40
 #define ERROR_CAROUSEL_HOME_FAIL 0x80
 #define ERROR_NOT_AUTO_MODE 0x100
+#define ERROR_NOT_CLAW_OPEN 0x200
+
+// Items to debounce
+typedef enum {
+	DEBOUNCE_QD_COMPLETE = 0,
+	DEBOUNCE_QD_JAW_OPEN,
+	DEBOUNCE_QD_AUTO,
+	MAX_DEBOUNCE_ITEMS
+} debounce_items;
+
+typedef struct {
+	float accum;
+	bool state;
+} debounce_status;
 
 
 // State names defined
 typedef enum {
 	STATE_IDLE = 0,
-	STATE_WAIT_COMPL_FALSE,
 	STATE_INIT,
 	STATE_TOOL_OUT,
 	STATE_TOOL_IN,
 	STATE_CAROUSEL_MOVE,
 	STATE_CAROUSEL_HOME,
+	STATE_WAIT_COMPL_FALSE,
 	STATE_ERROR
 } States;
+
+#define STATE_STACK_DEPTH 10
+static int state_stack[STATE_STACK_DEPTH];
+static int state_index;
+static debounce_status deb_status[MAX_DEBOUNCE_ITEMS];
 
 bool was_completed;
 bool was_on; // Previous state of pgm_running
 int distance;
+bool was_error; // Previous pass was in error state.
 
-void enqueue_state(int state) {
-	/* Pushes a new state on our stack. If the stack is full, does nothing */
-	if(++state_index >= STATE_STACK_DEPTH) {
-		state_index = STATE_STACK_DEPTH - 1;
-	} else {
-		state_stack[state_index] = state;
+/* Debounce the needed input pins. Debounce is done by adding elapsed time to
+ * an accumulator while the bit is TRUE and subtracting elapsed time while the
+ * bit is FALSE. The accumulator is limited between 0 and debounce_period. If
+ * the accumulator reaches debounce_period, the bit is deemed TRUE. If it
+ * reaches 0, the bit is deemed FALSE. */
+inline bool debounce(bool input_pin, int index,float period) {
+	if(input_pin) { // Input is high
+		if(deb_status[index].accum < debounce_period) 
+			deb_status[index].accum += period;
+		else
+			deb_status[index].state = TRUE;
+			
+	} else { // Input is low
+		if(deb_status[index].accum > 0.0)
+			deb_status[index].accum -= fperiod;
+		else
+			deb_status[index].state = FALSE;
 	}
+	return deb_status[index].state;
 }
 
-int dequeue_state(void) {
+/* The state LIFO stack array works from index 0 up. The bottom state is always
+ *  STATE_IDLE. */
+inline void enqueue_state(int state) {
+	/* Pushes a new state on our stack. If the stack is full, does nothing */
+	if(state_index < (STATE_STACK_DEPTH - 1))
+		state_stack[++state_index] = state;
+}
+
+inline int dequeue_state(void) {
 	/* Pops the next state from the state stack. the bottom state is 
 	 *  always STATE_IDLE.
 	 */
-	if(--state_index < 0) {
-		state_index = 0;
+	if(state_index > 0)
+		return state_stack[state_index--];
+	else
 		return STATE_IDLE;
-	} else {
-		return state_stack[state_index];
-	}
 }
 
 FUNCTION(_) {
-	/* Debounce the qd_complete and the qd_auto input pins. If (completed !=
-	 * was_completed) the state has changed this cycle.  Debounce is done by
-	 * adding elapsed time to an accumulator while the bit is TRUE and
-	 * subtracting elapsed time while the bit is FALSE. The accumulator is
-	 * limited between 0 and debounce_period. If the accumulator reaches
-	 * debounce_period, the bit is deemed TRUE. If it reaches 0, the bit is
-	 * deemed FALSE. */
+	/* Maintain the timer. Used for hardware timouts */
 	timer += fperiod;	
-	was_completed = completed;
-	if(qd_complete) {
-		deb_accum += fperiod;
-		if(deb_accum > debounce_period) {
-			deb_accum = debounce_period;
-			completed = TRUE;
-		}
-	} else {
-		deb_accum -= fperiod;
-		if(deb_accum < 0.0) {
-			deb_accum = 0.0;
-			completed = FALSE;
-		}
-	}
-	if(qd_auto) {
-		auto_accum += fperiod;
-		if(auto_accum > debounce_period) {
-			auto_accum = debounce_period;
-		}
-	} else {
-		// If the debounced state of qd_auto is FALSE, unhome the tool changer.
-		auto_accum -= fperiod;
-		if(auto_accum < 0.0) {
-			auto_accum = 0.0;
-			homed_flag = FALSE;
-		}
-	}
+
+	was_completed = completed; // save previous value
+	completed = debounce(qd_complete,DEBOUNCE_QD_COMPLETE,fperiod);
+	claw_open_deb = debounce(claw_open,DEBOUNCE_QD_JAW_OPEN,fperiod);
+	/* Unhome the tool changer if the Quickdraw hardware has been switched from AUTO mode */
+	if(!debounce(qd_auto,DEBOUNCE_QD_AUTO,fperiod))
+		homed_flag = FALSE;
 
 	/* Maintain the past and current machine states. */
 	was_on = is_on;
 	is_on = machine_on;
 			
 	state_changed = (cur_state != prev_state);
+	was_error = (prev_state == STATE_ERROR);
 	if(state_changed) {
 		prev_state = cur_state;
 	} 
+
+	/* If the machine is off, don't do anything. Turn off all the outputs and stay in the error state. */
+	if(!is_on) {
+		cur_state = STATE_ERROR;
+		tool_in_output = FALSE;
+		tool_out_output = FALSE;
+		carousel_cw_output = FALSE;
+		carousel_ccw_output = FALSE;
+		carousel_home_output = FALSE;
+	}
 
 	/* On entering each state other than IDLE, check for AUTO mode. If not, it's an error. */
 	switch(cur_state) {
 		case STATE_IDLE: // Check toolchange_req for a new tool request.
 			if(state_changed) {
-				/* We've returned here from another state. Set ack_out */
-				ack_out = TRUE;
-			} else if(toolchange_req && !ack_out) {
-				/* Latch the tool number inputs. */
+				/* Since cur_state is initialized to STATE_IDLE and at startup there is no state change, 
+				 *  we must have come here from another state. If it wasn't the STATE_ERROR, set done TRUE */
+				if(!was_error)
+					done = TRUE;
+			} else if(toolchange_req && !done) {
+				/* Latch the new tool inputs. */
 				new_tool_in = new_tool_no;
 				if(new_tool_in < 0 || new_tool_in > changer_capacity) {
 					rtapi_print_msg(RTAPI_MSG_ERR, "Invalid new_tool_no passed to qdtoolchange");
@@ -220,9 +243,9 @@ FUNCTION(_) {
 					/* All OK. Continue */
 					cur_state = STATE_INIT;
 				}
-			} else if(!toolchange_req) {
+			} else if(!toolchange_req && done) {
 				/* Release the ack only when the toolchange_req goes FALSE. */
-				ack_out = FALSE;
+				done = FALSE;
 			}
 			break; // STATE_IDLE
 
@@ -237,6 +260,12 @@ FUNCTION(_) {
 				/* completed is TRUE. We must wait for it to go FALSE before initiating a movement. */
 				enqueue_state(STATE_INIT);
 				cur_state = STATE_WAIT_COMPL_FALSE;
+			} else if(!claw_open_deb) {
+				/* The claw-open signal is not present. We can't proceed without that. Probably no
+				 *  air line connected. */
+				rtapi_print_msg(RTAPI_MSG_ERR, "Tool Changer not Reporting Claw Open. Check Compressed Air");
+				error_outputs = ERROR_NOT_CLAW_OPEN;
+				cur_state = STATE_ERROR;
 			} else {
 				if(new_tool_in) {
 					/* Only put a new tool in if asked to. Zero for new_tool_in means just 
@@ -255,28 +284,6 @@ FUNCTION(_) {
 				}
 			}
 			break; // STATE_INIT
-
-		case STATE_WAIT_COMPL_FALSE:
-			if(!qd_auto) {
-				 rtapi_print_msg(RTAPI_MSG_ERR, "Tool Changer not Switched to AUTO Mode");
-				 error_outputs = ERROR_NOT_AUTO_MODE;
-				 cur_state = STATE_ERROR;
-			} else if(state_changed) {
-				// Initialize the timer on entering this state
-				timer = 0.0;
-			} else if(completed) {
-				/* The debounced version of qd_complete is still TRUE. We need to wait for this to go
-				 *  FALSE before going to next_state. */
-				if(timer >= complete_max_time) {
-					rtapi_print_msg(RTAPI_MSG_ERR, "qd-complete input (Quickdraw RESET output) set for too long");
-					error_outputs = ERROR_QD_COMPLETE_STUCK_HIGH;
-					cur_state = STATE_ERROR;
-				}
-			} else {
-				/* OK to move on. */
-				cur_state = dequeue_state();
-			}
-			break; // STATE_WAIT_COMPL_FALSE
 
 		case STATE_TOOL_OUT: // Move the arm from spindle to carousel.
 			if(!qd_auto) {
@@ -377,7 +384,7 @@ FUNCTION(_) {
 				timer = 0.0;
 				if(move_cw) {
 					// CW movement. Decreasing pocket numbers
-					if(--cur_pocket_no <= 1)
+					if(--cur_pocket_no < 1)
 						cur_pocket_no = changer_capacity;
 				} else {
 					// CCW movement. Increasing pocket numbers
@@ -428,6 +435,28 @@ FUNCTION(_) {
 			}
 			break; // STATE_CAROUSEL_HOME
 		
+		case STATE_WAIT_COMPL_FALSE:
+			if(!qd_auto) {
+				 rtapi_print_msg(RTAPI_MSG_ERR, "Tool Changer not Switched to AUTO Mode");
+				 error_outputs = ERROR_NOT_AUTO_MODE;
+				 cur_state = STATE_ERROR;
+			} else if(state_changed) {
+				// Initialize the timer on entering this state
+				timer = 0.0;
+			} else if(completed) {
+				/* The debounced version of qd_complete is still TRUE. We need to wait for this to go
+				 *  FALSE before going to the next_state. */
+				if(timer >= complete_max_time) {
+					rtapi_print_msg(RTAPI_MSG_ERR, "qd-complete input (Quickdraw RESET output) set for too long");
+					error_outputs = ERROR_QD_COMPLETE_STUCK_HIGH;
+					cur_state = STATE_ERROR;
+				}
+			} else {
+				/* OK to move on. */
+				cur_state = dequeue_state();
+			}
+			break; // STATE_WAIT_COMPL_FALSE
+
 		case STATE_ERROR:
 			/* Do nothing, but recover when the machine gets turned on. */
 			if(!was_on && is_on)
@@ -440,7 +469,8 @@ FUNCTION(_) {
 	current_state = cur_state;
 	current_tool = cur_pocket_no;
 	error_mask = error_outputs;
-	change_ack = ack_out;
+	change_ack = (done && claw_open_deb);
+	is_homed = homed_flag;
 }
 
 EXTRA_SETUP() {
