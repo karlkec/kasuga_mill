@@ -15,7 +15,7 @@ pin out bit carousel_home_command "Turret Home command to the tool changer.";
 pin out bit tool_changed "True when the a tool change is complete. Normally this is connected to iocontrol.0.tool-changed";
 pin out bit is_homed "True when tool changer carousel is homed";
 pin out bit ready "True when qd_auto and claw_open are both TRUE";
-pin out unsigned error_mask "Error Output. See description";
+pin out unsigned error_code "Error Output. See description";
 pin out bit error_flag "Goes TRUE when in an error condition";
 
 // For debugging
@@ -168,7 +168,7 @@ static int move_cw; // Move the carousel CW
 static bool homed_flag; // Whether the tool changer carousel has been homed.
 static bool is_on; // Current state of machine_on
 static int cur_pocket_no; // The tool pocket currently in position. 0 if not homed
-static int error_outputs; // ORed error conditions
+static int error_output; // ORed error conditions
 static bool done;
 static long long compl_accum;
 static long long claw_accum;
@@ -281,8 +281,7 @@ FUNCTION(_) {
 				/* Latch the new tool inputs. */
 				new_tool_in = tool_num;
 				if(new_tool_in < 0 || new_tool_in > changer_capacity) {
-					rtapi_print_msg(RTAPI_MSG_ERR, error_str[ERROR_INVALID_NEW_TOOL]);
-					error_outputs = ERROR_INVALID_NEW_TOOL;
+					error_output = ERROR_INVALID_NEW_TOOL;
 					cur_state = STATE_ERROR;
 				} else {
 					/* All OK. Continue */
@@ -298,8 +297,7 @@ FUNCTION(_) {
 			/* Check state of hardware and take action if needed. Otherwise, start the tool change.
 			 * If not homed, we need to do that first. */
 			if(!qd_auto_deb) {
-				 rtapi_print_msg(RTAPI_MSG_ERR, error_str[ERROR_NOT_AUTO_MODE]);
-				 error_outputs = ERROR_NOT_AUTO_MODE;
+				 error_output = ERROR_NOT_AUTO_MODE;
 				 cur_state = STATE_ERROR;
 			} else if(completed) {
 				/* completed is TRUE. We must wait for it to go FALSE before initiating a movement. */
@@ -308,8 +306,7 @@ FUNCTION(_) {
 			} else if(!claw_open_deb) {
 				/* The claw-open signal is not present. We can't proceed without that. Probably no
 				 *  air line connected. */
-				rtapi_print_msg(RTAPI_MSG_ERR, error_str[ERROR_NOT_CLAW_OPEN]);
-				error_outputs = ERROR_NOT_CLAW_OPEN;
+				error_output = ERROR_NOT_CLAW_OPEN;
 				cur_state = STATE_ERROR;
 			} else {
 				if(new_tool_in) {
@@ -347,8 +344,7 @@ FUNCTION(_) {
 					cur_state = dequeue_state();
 				} else if(timer >= (unsigned long long)arm_move_timeout * NSPERSEC) {
 					tool_out_command = FALSE;
-					rtapi_print_msg(RTAPI_MSG_ERR, error_str[ERROR_ARM_TO_CAROUSEL_FAIL]);
-					error_outputs = ERROR_ARM_TO_CAROUSEL_FAIL;
+					error_output = ERROR_ARM_TO_CAROUSEL_FAIL;
 					cur_state = STATE_ERROR;
 				}
 			}
@@ -371,8 +367,7 @@ FUNCTION(_) {
 					cur_state = dequeue_state();
 				} else if(timer >= (unsigned long long)arm_move_timeout * NSPERSEC) {
 					tool_in_command = FALSE;
-					rtapi_print_msg(RTAPI_MSG_ERR, error_str[ERROR_ARM_TO_SPINDLE_FAIL]);
-					error_outputs = ERROR_ARM_TO_SPINDLE_FAIL;
+					error_output = ERROR_ARM_TO_SPINDLE_FAIL;
 					cur_state = STATE_ERROR;
 				}
 			}
@@ -407,8 +402,7 @@ FUNCTION(_) {
 				 *  but not past the timeout. We don't use the STATE_WAIT_COMPL_FALSE state since it might
 				 *  require a two-level return stack. */
 				if(timer >= complete_max_time * NSPERMSEC) {
-					rtapi_print_msg(RTAPI_MSG_ERR, error_str[ERROR_QD_COMPLETE_STUCK_HIGH]);
-					error_outputs = ERROR_QD_COMPLETE_STUCK_HIGH;
+					error_output = ERROR_QD_COMPLETE_STUCK_HIGH;
 					cur_state = STATE_ERROR;
 				}
 			} else if(completed && !was_completed) {
@@ -434,8 +428,7 @@ FUNCTION(_) {
 				/* completed is still false and has timed out */
 				carousel_cw_command = FALSE;
 				carousel_ccw_command = FALSE;
-				rtapi_print_msg(RTAPI_MSG_ERR, error_str[ERROR_CAROUSEL_MOVE_FAIL]);
-				error_outputs = ERROR_CAROUSEL_MOVE_FAIL;
+				error_output = ERROR_CAROUSEL_MOVE_FAIL;
 				cur_state = STATE_ERROR;
 			}
 			break; // STATE_CAROUSEL_MOVE
@@ -458,8 +451,7 @@ FUNCTION(_) {
 				cur_state = dequeue_state();
 			} else if(timer >= (unsigned long long)carousel_home_timeout * NSPERSEC) {
 				carousel_home_command = FALSE;
-				rtapi_print_msg(RTAPI_MSG_ERR, error_str[ERROR_CAROUSEL_HOME_FAIL]);
-				error_outputs = ERROR_CAROUSEL_HOME_FAIL;
+				error_output = ERROR_CAROUSEL_HOME_FAIL;
 				cur_state = STATE_ERROR;
 			}
 			break; // STATE_CAROUSEL_HOME
@@ -474,8 +466,7 @@ FUNCTION(_) {
 				/* The debounced version of qd_complete is still TRUE. We need to wait for this to go
 				 *  FALSE before going to the next_state. */
 				if(timer >= complete_max_time * NSPERMSEC) {
-					rtapi_print_msg(RTAPI_MSG_ERR, error_str[ERROR_QD_COMPLETE_STUCK_HIGH]);
-					error_outputs = ERROR_QD_COMPLETE_STUCK_HIGH;
+					error_output = ERROR_QD_COMPLETE_STUCK_HIGH;
 					cur_state = STATE_ERROR;
 				}
 			} else {
@@ -485,19 +476,22 @@ FUNCTION(_) {
 			break; // STATE_WAIT_COMPL_FALSE
 
 		case STATE_ERROR:
-			/* Do nothing, but recover when the machine gets turned on. */
-			if(!was_on && is_on) {
+			/* Display the error message, then do nothing, but recover when the machine is 
+			 *  from off to on. */
+			if(state_changed)
+				rtapi_print_msg(RTAPI_MSG_ERR,error_str[error_output]);
+			else if(!was_on && is_on) {
 				// We always go back to the idle state, but need to clear the stack
 				state_index = 0;
 				cur_state = STATE_IDLE;
-				error_outputs = 0;
+				error_output = 0;
 			}
 			break; // STATE_ERROR
 	}
 	current_state = cur_state;
 	current_tool = cur_pocket_no;
-	error_mask = error_outputs;
-	error_flag = (error_mask != 0);
+	error_code = error_output;
+	error_flag = (error_code != 0);
 	tool_changed = (done && claw_open_deb);
 	is_homed = homed_flag;
 	ready = (qd_auto_deb && claw_open_deb && !error_flag);
