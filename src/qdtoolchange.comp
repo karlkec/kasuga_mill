@@ -131,7 +131,7 @@ const char *error_str[] = {
 	"Quickdraw Took Too Long to Home the Carousel",
 	"Quickdraw not Turned On in AUTO Mode",
 	"Quickdraw Claw not Reported Open. Got Compressed Air?",
-	"Quickdraw Claw Open Timed Out",
+	"Quickdraw Claw Open Timed Out. Got Compressed Air?",
 };
 
 // Time conversions
@@ -480,12 +480,13 @@ FUNCTION(_) {
 		case STATE_WAIT_CLAW_OPEN:
 			if(state_changed) {
 				timer = 0;
+			} else if(claw_open_deb) {
+				/* Claw opened in time. OK to move on. */
+				cur_state = dequeue_state();
 			} else if(timer > claw_open_timeout * NSPERSEC) {
 				/* Claw took too long to open */
 				error_output = ERROR_CLAW_OPEN_TIMEOUT;
 				cur_state = STATE_ERROR;
-			} else if(claw_open_deb) {
-				cur_state = dequeue_state();
 			}
 			break;
 
