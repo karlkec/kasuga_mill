@@ -21,11 +21,11 @@ pin out bit error_flag "Goes TRUE when in an error condition";
 // For debugging
 pin out signed current_tool "For debugging. Tool number currently in position. Will be zero until homed";
 pin out signed current_state "For debugging. State of the internal state machine";
-pin out signed test-out "For Debugging -- signed 32-bit output";
 
 param rw unsigned carousel_home_timeout=45 "Maximum time in seconds to allow the carousel to home. Default = 45 sec";
 param rw unsigned carousel_move_timeout=3 "Maximum time in seconds to allow the carousel to move one tool position. Default = 3 sec";
 param rw unsigned arm_move_timeout=15.0 "Maximum time in seconds to allow for moving a tool from the carousel to or from the spindle. Default = 15 sec";
+param rw unsigned claw_open_timeout=1.0 "Maximum time in seconds to allow the claw to open after a tool in or tool out is complete";
 param rw unsigned complete_max_time=1000 "Maximum time in MILLIseconds to allow the complete input to remain high before flagging an error. Default = 1000 msec";
 param rw unsigned changer_capacity=24 "Max number of tools the tool changer is capable of handling. Default = 24";
 param rw unsigned debounce_period=40 "Time in MILLIseconds for debouncing. Default = 40 msec";
@@ -116,6 +116,7 @@ typedef enum {
 	ERROR_CAROUSEL_HOME_FAIL,
 	ERROR_NOT_AUTO_MODE,
 	ERROR_NOT_CLAW_OPEN,
+	ERROR_CLAW_OPEN_TIMEOUT,
 	NUM_ERROR_CODES
 } error_codes;
 
@@ -130,6 +131,7 @@ const char *error_str[] = {
 	"Quickdraw Took Too Long to Home the Carousel",
 	"Quickdraw not Turned On in AUTO Mode",
 	"Quickdraw Claw not Reported Open. Got Compressed Air?",
+	"Quickdraw Claw Open Timed Out",
 };
 
 // Time conversions
@@ -152,8 +154,9 @@ typedef enum {
 	STATE_TOOL_IN, // 3
 	STATE_CAROUSEL_MOVE, // 4
 	STATE_CAROUSEL_HOME, // 5
-	STATE_WAIT_COMPL_FALSE, // 6
-	STATE_ERROR // 7
+	STATE_WAIT_CLAW_OPEN, // 6
+	STATE_WAIT_COMPL_FALSE, // 7
+	STATE_ERROR // 8
 } States;
 
 #define STATE_STACK_DEPTH 10
@@ -211,7 +214,6 @@ FUNCTION(_) {
 	 * the accumulator reaches debounce_period, the bit is deemed TRUE. If it
 	 * reaches 0, the bit is deemed FALSE. */
 	was_completed = completed; // save previous value
-//test_out = 20;
 	if(qd_complete) { // Input is high
 		if(compl_accum < (long long)debounce_period * NSPERMSEC) 
 			compl_accum += period;
@@ -339,9 +341,9 @@ FUNCTION(_) {
 				}
 			} else {
 				if(completed) {
-					/* Done! */
+					/* Done! Wait for the claw to open before moving on. */
 					tool_out_command = FALSE;
-					cur_state = dequeue_state();
+					cur_state = STATE_WAIT_CLAW_OPEN;
 				} else if(timer >= (unsigned long long)arm_move_timeout * NSPERSEC) {
 					tool_out_command = FALSE;
 					error_output = ERROR_ARM_TO_CAROUSEL_FAIL;
@@ -362,9 +364,9 @@ FUNCTION(_) {
 				}
 			} else {
 				if(completed) {
-					/* Done with the tool change. */
+					/* Done with the tool change. Wait for the claw to open before moving on. */
 					tool_in_command = FALSE;
-					cur_state = dequeue_state();
+					cur_state = STATE_WAIT_CLAW_OPEN;
 				} else if(timer >= (unsigned long long)arm_move_timeout * NSPERSEC) {
 					tool_in_command = FALSE;
 					error_output = ERROR_ARM_TO_SPINDLE_FAIL;
@@ -475,6 +477,18 @@ FUNCTION(_) {
 			}
 			break; // STATE_WAIT_COMPL_FALSE
 
+		case STATE_WAIT_CLAW_OPEN:
+			if(state_changed) {
+				timer = 0;
+			} else if(timer > claw_open_timeout * NSPERSEC) {
+				/* Claw took too long to open */
+				error_output = ERROR_CLAW_OPEN_TIMEOUT;
+				cur_state = STATE_ERROR;
+			} else if(claw_open_deb) {
+				cur_state = dequeue_state();
+			}
+			break;
+
 		case STATE_ERROR:
 			/* Display the error message, then do nothing, but recover when the machine is 
 			 *  from off to on. */
@@ -495,7 +509,6 @@ FUNCTION(_) {
 	tool_changed = (done && claw_open_deb);
 	is_homed = homed_flag;
 	ready = (qd_auto_deb && claw_open_deb && !error_flag);
-test_out = was_on + is_on * 2;
 }
 
 EXTRA_SETUP() {
