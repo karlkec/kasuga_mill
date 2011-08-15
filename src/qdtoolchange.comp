@@ -121,15 +121,15 @@ typedef enum {
 
 const char *error_str[] = {
 	"No Error",
-	"Invalid tool-num passed to qdtoolchange",
+	"Tool Number out of Range",
 	"Quickdraw Took Too Long to Move the Arm to the Carousel",
 	"Quickdraw Took Too Long to Move the Arm to the Spindle",
 	"",
-	"qd-complete input (Quickdraw RESET output) set for too long",
-	"Quickdraw took too long to move the carousel",
-	"Quickdraw took too long to home the carousel",
-	"Tool Changer not Switched to AUTO Mode",
-	"Tool Changer Claw not Reported Open. Got Compressed Air?",
+	"qd-complete Input (Quickdraw RESET Output) Set for Too Long",
+	"Quickdraw Took Too Long to Move the Carousel",
+	"Quickdraw Took Too Long to Home the Carousel",
+	"Quickdraw not Turned On in AUTO Mode",
+	"Quickdraw Claw not Reported Open. Got Compressed Air?",
 };
 
 // Time conversions
