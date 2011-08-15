@@ -21,6 +21,7 @@ pin out bit error_flag "Goes TRUE when in an error condition";
 // For debugging
 pin out signed current_tool "For debugging. Tool number currently in position. Will be zero until homed";
 pin out signed current_state "For debugging. State of the internal state machine";
+pin out signed test-out "For Debugging -- signed 32-bit output";
 
 param rw unsigned carousel_home_timeout=45 "Maximum time in seconds to allow the carousel to home. Default = 45 sec";
 param rw unsigned carousel_move_timeout=3 "Maximum time in seconds to allow the carousel to move one tool position. Default = 3 sec";
@@ -128,27 +129,21 @@ typedef enum {
 	MAX_DEBOUNCE_ITEMS
 } debounce_items;
 
-typedef struct {
-	long long accum;
-	bool state;
-} debounce_status;
-
 // State names defined
 typedef enum {
-	STATE_IDLE,
-	STATE_INIT,
-	STATE_TOOL_OUT,
-	STATE_TOOL_IN,
-	STATE_CAROUSEL_MOVE,
-	STATE_CAROUSEL_HOME,
-	STATE_WAIT_COMPL_FALSE,
-	STATE_ERROR
+	STATE_IDLE, // 0
+	STATE_INIT, // 1
+	STATE_TOOL_OUT, // 2
+	STATE_TOOL_IN, // 3
+	STATE_CAROUSEL_MOVE, // 4
+	STATE_CAROUSEL_HOME, // 5
+	STATE_WAIT_COMPL_FALSE, // 6
+	STATE_ERROR // 7
 } States;
 
 #define STATE_STACK_DEPTH 10
 static int state_stack[STATE_STACK_DEPTH];
 static int state_index;
-static debounce_status deb_status[MAX_DEBOUNCE_ITEMS];
 static short cur_state;
 static short prev_state;
 static unsigned long long timer;
@@ -160,35 +155,18 @@ static bool is_on; // Current state of machine_on
 static int cur_pocket_no; // The tool pocket currently in position. 0 if not homed
 static int error_outputs; // ORed error conditions
 static bool done;
+static long long compl_accum;
+static long long claw_accum;
+static long long auto_accum;
 
-bool state_changed;
-bool claw_open_deb; // Debounced state of the claw-open input pin
-bool qd_auto_deb; // Debounced state of qd_auto
-bool was_completed;
-bool was_on; // Previous state of pgm_running
-int distance;
-bool was_error; // Previous pass was in error state.
+static bool state_changed;
+static bool claw_open_deb; // Debounced state of the claw-open input pin
+static bool qd_auto_deb; // Debounced state of qd_auto
+static bool was_completed;
+static bool was_on; // Previous state of pgm_running
+static int distance;
+static bool was_error; // Previous pass was in error state.
 
-/* Debounce the needed input pins. Debounce is done by adding elapsed time to
- * an accumulator while the bit is TRUE and subtracting elapsed time while the
- * bit is FALSE. The accumulator is limited between 0 and debounce_period. If
- * the accumulator reaches debounce_period, the bit is deemed TRUE. If it
- * reaches 0, the bit is deemed FALSE. */
-inline bool debounce(bool input_pin, int index,unsigned long cycleperiod) {
-	if(input_pin) { // Input is high
-		if(deb_status[index].accum < (long long)debounce_period * NSPERMSEC) 
-			deb_status[index].accum += cycleperiod;
-		else
-			deb_status[index].state = TRUE;
-			
-	} else { // Input is low
-		if(deb_status[index].accum > 0)
-			deb_status[index].accum -= cycleperiod;
-		else
-			deb_status[index].state = FALSE;
-	}
-	return deb_status[index].state;
-}
 
 /* The state LIFO stack array works from index 0 up. The bottom state is always
  *  STATE_IDLE. */
@@ -212,14 +190,49 @@ FUNCTION(_) {
 	/* Maintain the timer. Used for hardware timouts */
 	timer += period;	
 
-	/* Debounce the inputs which need it. */
+	/* Debounce the needed input pins. Debounce is done by adding elapsed time to
+	 * an accumulator while the bit is TRUE and subtracting elapsed time while the
+	 * bit is FALSE. The accumulator is limited between 0 and debounce_period. If
+	 * the accumulator reaches debounce_period, the bit is deemed TRUE. If it
+	 * reaches 0, the bit is deemed FALSE. */
 	was_completed = completed; // save previous value
-	completed = debounce(qd_complete,DEBOUNCE_QD_COMPLETE,period);
-	claw_open_deb = debounce(claw_open,DEBOUNCE_QD_JAW_OPEN,period);
-	/* Unhome the tool changer if the Quickdraw hardware has been switched from AUTO mode */
-	qd_auto_deb = debounce(qd_auto,DEBOUNCE_QD_AUTO,period);
-	if(!qd_auto_deb)
-		homed_flag = FALSE;
+//test_out = 20;
+	if(qd_complete) { // Input is high
+		if(compl_accum < (long long)debounce_period * NSPERMSEC) 
+			compl_accum += period;
+		else
+			completed = TRUE;
+	} else { // Input is low
+		if(compl_accum > 0)
+			compl_accum -= period;
+		else
+			completed = FALSE;
+	}
+	if(claw_open) { // Input is high
+		if(claw_accum < (long long)debounce_period * NSPERMSEC) 
+			claw_accum += period;
+		else
+			claw_open_deb = TRUE;
+	} else { // Input is low
+		if(claw_accum > 0)
+			claw_accum -= period;
+		else
+			claw_open_deb = FALSE;
+	}
+	if(qd_auto) { // Input is high
+		if(auto_accum < (long long)debounce_period * NSPERMSEC) 
+			auto_accum += period;
+		else
+			qd_auto_deb = TRUE;
+	} else { // Input is low
+		if(auto_accum > 0)
+			auto_accum -= period;
+		else
+			/* Unhome the tool changer if the Quickdraw hardware has been switched from AUTO mode */
+			qd_auto_deb = FALSE;
+			homed_flag = FALSE;
+			cur_pocket_no = 0;
+	}
 
 	/* Maintain the past and current machine states. */
 	was_on = is_on;
@@ -458,11 +471,12 @@ FUNCTION(_) {
 
 		case STATE_ERROR:
 			/* Do nothing, but recover when the machine gets turned on. */
-			if(!was_on && is_on)
+			if(!was_on && is_on) {
 				// We always go back to the idle state, but need to clear the stack
 				state_index = 0;
 				cur_state = STATE_IDLE;
 				error_outputs = 0;
+			}
 			break; // STATE_ERROR
 	}
 	current_state = cur_state;
@@ -472,6 +486,7 @@ FUNCTION(_) {
 	tool_changed = (done && claw_open_deb);
 	is_homed = homed_flag;
 	ready = (qd_auto_deb && claw_open_deb && !error_flag);
+test_out = was_on + is_on * 2;
 }
 
 EXTRA_SETUP() {
