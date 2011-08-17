@@ -1,15 +1,15 @@
+loadusr -Wn iotest pyvcp -c iotest qdtestpanel.xml
+
 loadrt threads name1=servo-thread period1=1000000
 
-loadrt qdtoolchanger
+loadrt qdtoolchange
 loadrt qdsim
-addf qdtoolchanger servo-thread
+addf qdtoolchange servo-thread
 addf qdsim servo-thread
 loadrt conv_float_s32 count=1
 loadrt flipflop count=1
 addf conv-float-s32.0 servo-thread
 addf flipflop.0 servo-thread
-
-
 
 ############# Tool Changer #####################
 # The change tool button gets a S-R flip-flop, to simulate emc's action
@@ -23,16 +23,16 @@ net machine-on <= iotest.machine-on => qdtoolchange.machine-on
 net qd-error <= qdtoolchange.error-flag => iotest.error-led
 
 # Hardware inputs from the tool changer to the qdtoolchange component
-net qd-reset <= qdsim => qdtoolchange.qd-complete
-net claw-open <= qdsim => qdtoolchange.claw-open
-net auto-mode <=  => qdtoolchange.qd-auto
+net qd-reset <= qdsim.qd-complete => qdtoolchange.qd-complete
+net claw-open <= qdsim.claw-open-out => qdtoolchange.claw-open
+net auto-mode <= iotest.auto-mode => qdtoolchange.qd-auto
 
 # Output commands from qdtoolchange component to tool changer hardware
-net tool-out-command <= qdtoolchange.tool-out-command => qdsim
-net carousel-cw-command <= qdtoolchange.carousel-cw-command => qdsim
-net carousel-ccw-command <= qdtoolchange.carousel-ccw-command => qdsim
-net carousel-home-command <= qdtoolchange.carousel-home-command => qdsim
-net tool-in-command <= qdtoolchange.tool-in-command => qdsim
+net tool-out-command <= qdtoolchange.tool-out-command => qdsim.tool-out-command
+net tool-in-command <= qdtoolchange.tool-in-command => qdsim.tool-in-command
+net carousel-cw-command <= qdtoolchange.carousel-cw-command => qdsim.carousel-cw-command
+net carousel-ccw-command <= qdtoolchange.carousel-ccw-command => qdsim.carousel-ccw-command
+net carousel-home-command <= qdtoolchange.carousel-home-command => qdsim.carousel-home-command
 
 # iotest hardware monitoring
 net tool-change-latched => iotest.request-led
@@ -52,7 +52,12 @@ net qdtoolchanger-cur-tool <= qdtoolchange.current-tool => iotest.cur-toolno-dis
 net qdtoolchanger-homed <= qdtoolchange.is-homed => iotest.homed-led
 net qdtoolchanger-ready <= qdtoolchange.ready => iotest.qd-ready-led
 
-#helps for debugging
+# Debugging the qdsim component
+net qdsim-pocket <= qdsim.cur-tool-no => iotest.cur-pocket-disp
+net qdsim-state <= qdsim.cur-state-out => iotest.qdsim-state
+net qdsim-arm-spindle <= qdsim.arm-spindle => iotest.arm-spindle
+
+# debugging
 loadusr halmeter
 
 # start 
