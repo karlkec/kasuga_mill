@@ -1,0 +1,167 @@
+component qdsim "EMC HAL component to simulate the Dana Summit Quickdraw tool changer";
+
+pin in bit tool_in_command "Tool-In command to the tool changer. Moves the arm to the spindle";
+pin in bit tool_out_command "Tool-Out command to the tool changer. Moves the arm to the carousel";
+pin in bit carousel_cw_command "Turret CW command to the tool changer. Moves the carousel clockwise";
+pin in bit carousel_ccw_command "Turret CCW command to the tool changer. Moves the carousel counterclockwise";
+pin in bit carousel_home_command "Turret Home command to the tool changer.";
+
+pin out bit qd_complete "Reset signal from the Quickdraw Tool Changer that the current operation is complete";
+pin out bit claw_open_out "Indication that the claw is being held in the opon position.";
+
+pin out signed cur_tool_no "Current tool number";
+pin out signed cur_state_out "Current State";
+pin out bit arm_spindle "Arm is at the Spindle";
+
+param rw unsigned carousel_home_time=10.0 "Time in seconds for the carousel to home.";
+param rw unsigned carousel_move_time=1.2 "Time in seconds for the carousel to move one tool position.";
+param rw unsigned arm_move_time=7.0 "Time in seconds for moving a tool from the carousel to or from the spindle.";
+param rw unsigned complete_time=0.1 "Time in seconds for complete to stay TRUE";
+param rw unsigned claw_open_time=0.2 "Time in seconds for the claw open indication to happen after a tool in or tool out is complete";
+
+description """
+qdtoolchange simulates the Dana Summit Quickdraw tool changer.o
+
+""";
+
+license "GPL";
+author "K. Cunningham";
+option singleton yes;
+function _ ;
+;;
+
+// State names defined
+typedef enum {
+	STATE_IDLE, // 0
+	STATE_TOOL_OUT, // 1
+	STATE_TOOL_IN, // 2
+	STATE_CAROUSEL_CW, // 3
+	STATE_CAROUSEL_CCW, // 4
+	STATE_CAROUSEL_HOME, // 5
+	STATE_COMPL // 6
+} States;
+
+#define STATE_STACK_DEPTH 10
+static short cur_state;
+static short prev_state;
+static float timer;
+static float home_time;
+static int cur_pocket_no = 1; // Current tool number 
+static bool arm_at_spindle; // Where is the arm
+static bool state_changed;
+static bool claw_open = TRUE;
+static bool compl_out;
+
+FUNCTION(_) {
+	/* Maintain the timer */
+	timer += period;	
+	state_changed = (cur_state != prev_state);
+	if(state_changed) {
+		prev_state = cur_state;
+	} 
+
+	/* On entering each state other than IDLE, check for AUTO mode. If not, it's an error. */
+	switch(cur_state) {
+		case STATE_IDLE: // Check tool_change for a new tool request.
+			if(state_changed) {
+				/* Since cur_state is initialized to STATE_IDLE and at startup there is no state tool_change, 
+				 *  we must have come here from another state. If it wasn't the STATE_ERROR, set done TRUE */
+			} else if(tool_in_command) {
+				cur_state = STATE_TOOL_IN;
+			} else if(tool_out_command) {
+				cur_state = STATE_TOOL_OUT;
+			} else if(carousel_cw_command) {
+				cur_state = STATE_CAROUSEL_CW;
+			} else if(carousel_ccw_command) {
+				cur_state = STATE_CAROUSEL_CCW;
+			} else if(carousel_home_command) {
+				cur_state = STATE_CAROUSEL_HOME;
+			}
+			break; // STATE_IDLE
+
+		case STATE_TOOL_OUT: // 1
+			if(state_changed) {
+				timer = 0.0;
+				/* Claw will close if at spindle */
+				if(arm_at_spindle)
+					claw_open = FALSE;
+			} else if(!arm_at_spindle || timer > arm_move_time) {
+				// Arm already at the carousel, or time has passed
+				arm_at_spindle = FALSE;
+				cur_state = STATE_COMPL;
+			}
+			break; // STATE_INIT
+
+		case STATE_TOOL_IN: // 2
+			if(state_changed) {
+				claw_open = FALSE;
+				timer = 0.0;
+			} else if(arm_at_spindle || timer > arm_move_time) {
+				// Arm already at the spindle, or time has passed
+				arm_at_spindle = TRUE;
+				cur_state = STATE_COMPL;
+			}
+			break; // STATE_INIT
+
+		case STATE_CAROUSEL_CW: // Move clockwise. State 3
+			if (state_changed) {
+				timer = 0.0;
+			} else if(timer > carousel_move_time) {
+				/* Moved one tool position*/
+				if(--cur_pocket_no < 1)
+					cur_pocket_no = 24;
+				timer = 0.0;
+				cur_state = STATE_COMPL;
+			}
+			break; // STATE_CAROUSEL_CW
+
+		case STATE_CAROUSEL_CCW: // Move Counterclockwise. State 4
+			if (state_changed) {
+				timer = 0.0;
+			} else if(timer > carousel_move_time) {
+				/* Moved one tool position*/
+				if(++cur_pocket_no > 24)
+					cur_pocket_no = 1;
+				timer = 0.0;
+				cur_state = STATE_COMPL;
+			}
+			break; // STATE_CAROUSEL_CW
+
+		case STATE_CAROUSEL_HOME: // State 5
+			if(state_changed) {
+				timer = 0.0;
+				home_time = carousel_move_time * (cur_pocket_no - 1);
+			} else if(timer > home_time) {
+				/* Done with homing the carousel. */
+				cur_pocket_no = 1;
+				cur_state = STATE_COMPL;
+			}
+			break; // STATE_CAROUSEL_HOME
+
+		case STATE_COMPL: // State 6
+			/* Sets the complete output for the allowed time, 
+			 * and after a different time sets the claw open indication */
+			if(state_changed) {
+				timer = 0.0;
+				compl_out = TRUE;
+			} else {
+				if(compl_out && timer > complete_time) {
+					compl_out = FALSE;
+				}
+				if(!claw_open && timer > claw_open_time) {
+					claw_open = TRUE;
+				}
+				if(claw_open && !compl_out) {
+					/* Exit after both operations are complete */
+					cur_state = STATE_IDLE;
+				}
+			}
+			break;
+	}
+	/* Update outputs */
+	qd_complete = compl_out;
+	claw_open_out = claw_open;
+	cur_tool_no = cur_pocket_no;
+	cur_state_out = cur_state;
+	arm_spindle = arm_at_spindle;
+}
