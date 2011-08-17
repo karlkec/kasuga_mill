@@ -1,0 +1,2 @@
+halrun -f test_qdtoolchange.hal
+#sleep 2
