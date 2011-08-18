@@ -1,9 +1,5 @@
 # components
-loadrt conv_s32_float count=1 
-loadrt conv_float_s32 count=1 
 loadrt sphereprobe 
-loadrt motorsim count=1 
-loadrt spindlemotor count=1 
 loadrt encoder num_chan=6 
 loadrt sim_encoder num_chan=3 
 loadrt wcomp count=9 
@@ -72,7 +68,6 @@ net ZphZ sim-encoder.2.phase-Z => encoder.2.phase-Z
 net Zpos-cmd axis.2.motor-pos-cmd => pid.2.command
 net Zpos-fb encoder.2.position => axis.2.motor-pos-fb pid.2.feedback
 net Zvel ddt.4.out => ddt.5.in
-net dummy-reverse motion.spindle-reverse
 net estop-loop iocontrol.0.user-enable-out => iocontrol.0.emc-enable-in
 net jog-speed pyvcp.jog-speed
 net jog-x-neg pyvcp.jog-x-
@@ -81,16 +76,6 @@ net jog-y-neg pyvcp.jog-y-
 net jog-y-pos pyvcp.jog-y+
 net jog-z-neg pyvcp.jog-z-
 net jog-z-pos pyvcp.jog-z+
-net man-gear pyvcp.use-man-gear => hal_spindlemanager.use-man-gear
-net man-gear-no-f pyvcp.man-gear-sel => conv-float-s32.0.in
-net man-gear-no-s32 conv-float-s32.0.out => hal_spindlemanager.gear-no
-net man-gear-out-f conv-s32-float.0.out
-net man-gear-out-s32 hal_spindlemanager.gear-no-out => conv-s32-float.0.in
-net man-sp-set pyvcp.set-sspeed => hal_spindlemanager.mspeed-set
-net man-sp-speed pyvcp.spindle-man-speed => hal_spindlemanager.mspeed-in
-net man-speed pyvcp.use-man-speed => hal_spindlemanager.use-man-speed
-net motor-speed hal_spindlemanager.motor-speed-out => spindlemotor.0.commanded-speed
-net motor-speed-limited hal_spindlemanager.mspeed-limit => pyvcp.motor-limited
 net optional-stp-is-on halui.program.optional-stop.is-on => pyvcp.ostop-is-on
 net optional-stp-off pyvcp.ostop-off => halui.program.optional-stop.off
 net optional-stp-on pyvcp.ostop-on => halui.program.optional-stop.on
@@ -101,21 +86,6 @@ net program-single-step pyvcp.step => halui.program.step
 net px encoder.0.rawcounts => sphereprobe.0.px
 net py encoder.1.rawcounts => sphereprobe.0.py
 net pz encoder.2.rawcounts => sphereprobe.0.pz
-net ratio hal_spindlemanager.gear-ratio-out => spindlemotor.0.gear-ratio
-net sp-enable motion.spindle-on => hal_spindlemanager.enable-in
-net sp-enable-ma_mo hal_spindlemanager.enable-out => spindlemotor.0.enable-in
-net sp-override halui.spindle-override.value => hal_spindlemanager.override-in
-net sp-speed motion.spindle-speed-out => hal_spindlemanager.sspeed-in pyvcp.commanded-rpm
-net sp-speed-error hal_spindlemanager.sspeed-error => pyvcp.sspeed-error
-net sp-stopped spindlemotor.0.zero-speed => hal_spindlemanager.is-stopped
-net spindle-at-speed spindlemotor.0.at-speed => motion.spindle-at-speed
-net spindle-enc-fb motorsim.0.output => spindlemotor.0.actual-speed
-net spindle-enc-revs motorsim.0.pos => spindlemotor.0.motor-pos-in
-net spindle-forward spindlemotor.0.forward => motorsim.0.forward
-net spindle-reverse spindlemotor.0.reverse => motorsim.0.reverse
-net spindle-revs spindlemotor.0.spindle-pos-out => motion.spindle-revs
-net spindle-vel-fb spindlemotor.0.spindle-rpm => motion.spindle-speed-in pyvcp.spindle-rpm
-net spindle-vel-output spindlemotor.0.output => motorsim.0.commanded-speed
 net tool-change iocontrol.0.tool-change => hal_manualtoolchange.change
 net tool-changed hal_manualtoolchange.changed => iocontrol.0.tool-changed
 net tool-prep-loop iocontrol.0.tool-prepare => iocontrol.0.tool-prepared
@@ -124,68 +94,42 @@ net xflt axis.0.amp-fault-in
 net yflt axis.1.amp-fault-in
 net zflt axis.2.amp-fault-in
 # parameter values
-setp conv-float-s32.0.clamp        FALSE
-setp conv-float-s32.0.tmax         2244
-setp conv-s32-float.0.tmax          137
-setp ddt.0.tmax         2054
-setp ddt.1.tmax         2121
-setp ddt.2.tmax          505
-setp ddt.3.tmax         1029
-setp ddt.4.tmax         4117
-setp ddt.5.tmax          923
-setp encoder.capture-position.tmax         9492
-setp encoder.update-counters.tmax         7317
-setp hal_spindlemanager.motor-max         2500
-setp hal_spindlemanager.motor-min         1000
-setp hal_spindlemanager.motor-nom         1750
-setp hal_spindlemanager.ratio-gear1        23.31
-setp hal_spindlemanager.ratio-gear10        0.583
-setp hal_spindlemanager.ratio-gear2       11.669
-setp hal_spindlemanager.ratio-gear3        7.143
-setp hal_spindlemanager.ratio-gear4            5
-setp hal_spindlemanager.ratio-gear5        3.891
-setp hal_spindlemanager.ratio-gear6          3.3
-setp hal_spindlemanager.ratio-gear7        1.751
-setp hal_spindlemanager.ratio-gear8        1.094
-setp hal_spindlemanager.ratio-gear9        0.761
+setp ddt.0.tmax         2158
+setp ddt.1.tmax         1259
+setp ddt.2.tmax         1015
+setp ddt.3.tmax         1344
+setp ddt.4.tmax         1263
+setp ddt.5.tmax         1599
+setp encoder.capture-position.tmax         8998
+setp encoder.update-counters.tmax         6959
 setp lowpass.0.gain          0.1
-setp lowpass.0.tmax         2268
+setp lowpass.0.tmax         1902
 setp lowpass.1.gain          0.1
-setp lowpass.1.tmax          715
+setp lowpass.1.tmax         1381
 setp lowpass.2.gain          0.1
-setp lowpass.2.tmax         1064
-setp motion-command-handler.tmax         9784
-setp motion-controller.tmax        49735
+setp lowpass.2.tmax         1219
+setp motion-command-handler.tmax         5564
+setp motion-controller.tmax        48270
 setp motion.servo.overruns   0x00000000
-setp motorsim.0.accel          500
-setp motorsim.0.tmax         3110
-setp pid.0.do-pid-calcs.tmax         5691
-setp pid.1.do-pid-calcs.tmax         2782
-setp pid.2.do-pid-calcs.tmax         7185
-setp scale.0.tmax         1689
-setp scale.1.tmax         1100
-setp scale.2.tmax         1345
-setp sim-encoder.make-pulses.tmax         3699
-setp sim-encoder.update-speed.tmax         2962
-setp sphereprobe.0.tmax         6370
-setp spindlemotor.0.accel          500
-setp spindlemotor.0.decel          500
-setp spindlemotor.0.speed-tolerance          1.1
-setp spindlemotor.0.spindle-lpf            1
-setp spindlemotor.0.tmax         8477
-setp spindlemotor.0.zero-tolerance         0.01
-setp wcomp.0.tmax         2598
-setp wcomp.1.tmax         1409
-setp wcomp.2.tmax         1394
-setp wcomp.3.tmax         1705
-setp wcomp.4.tmax         1858
-setp wcomp.5.tmax         2069
-setp wcomp.6.tmax         1766
-setp wcomp.7.tmax         1513
-setp wcomp.8.tmax         1431
+setp pid.0.do-pid-calcs.tmax         4949
+setp pid.1.do-pid-calcs.tmax         2182
+setp pid.2.do-pid-calcs.tmax         2386
+setp scale.0.tmax         1637
+setp scale.1.tmax         1169
+setp scale.2.tmax         1545
+setp sim-encoder.make-pulses.tmax         6432
+setp sim-encoder.update-speed.tmax         2968
+setp sphereprobe.0.tmax         3483
+setp wcomp.0.tmax         2534
+setp wcomp.1.tmax         1498
+setp wcomp.2.tmax         1924
+setp wcomp.3.tmax         1330
+setp wcomp.4.tmax         1772
+setp wcomp.5.tmax         1570
+setp wcomp.6.tmax         1444
+setp wcomp.7.tmax         1967
+setp wcomp.8.tmax         2327
 # realtime thread/function links
-addf spindlemotor.0 servo-thread
-addf motorsim.0 servo-thread
 addf encoder.capture-position servo-thread
 addf wcomp.0 servo-thread
 addf wcomp.1 servo-thread
@@ -214,8 +158,6 @@ addf ddt.2 servo-thread
 addf ddt.3 servo-thread
 addf ddt.4 servo-thread
 addf ddt.5 servo-thread
-addf conv-float-s32.0 servo-thread
-addf conv-s32-float.0 servo-thread
 addf sim-encoder.make-pulses base-thread
 addf sphereprobe.0 base-thread
 addf encoder.update-counters base-thread
