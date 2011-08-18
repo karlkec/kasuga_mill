@@ -1,1 +1,3 @@
-*.swp
+*.sw*
+*~
+configs/sim/autosave.halscope
