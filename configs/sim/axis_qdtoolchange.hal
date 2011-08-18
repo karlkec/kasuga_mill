@@ -4,18 +4,38 @@ loadrt qdtoolchange
 loadrt qdsim
 addf qdtoolchange servo-thread
 addf qdsim servo-thread
+loadrt or2 count=1
+addf or2.0 servo-thread
+loadrt and2 count=2
+addf and2.0 servo-thread
+addf and2.1 servo-thread
 
-# The change tool button gets a S-R flip-flop, to simulate emc's action
-net tool-change-latched <= flipflop.0.out => qdtoolchange.tool-change
-net tool-conv <= iotest.new-tool-no => conv-float-s32.0.in
+unlinkp iocontrol.0.tool-change
+unlinkp iocontrol.0.tool-changed
+unlinkp iocontrol.0.tool-prep-number
 
-net new-tool <= conv-float-s32.0.out => qdtoolchange.tool-num
-net tc-complete <= qdtoolchange.tool-changed => flipflop.0.reset 
 
-net machine-on <= iotest.machine-on => qdtoolchange.machine-on
-net auto-mode <= iotest.auto-mode => qdtoolchange.qd-auto
+# The manual or auto tool changer gets selected here
+net sel-man-change <= pyvcp.radiobutton.0.tc-man => and2.1.in1
+net sel-auto-change <= pyvcp.radiobutton.0.tc-auto => and2.0.in1
+net tool-change-in iocontrol.0.tool-change => and2.0.in0 and2.1.in0
+net tool-change-auto <= and2.0.out => qdtoolchange.tool-change
+net tool-change-man  <= and2.1.out => hal_manualtoolchange.change
+net tool-conv <= pyvcp.new-tool-no => conv-float-s32.0.in
 
-net qd-error <= qdtoolchange.error-flag => iotest.error-led
+net tool-prep-number <= iocontrol.0.tool-prep-number => hal_manualtoolchange.number 
+net tool-prev-number => qdtoolchange.tool-num
+
+# Or the change complete outputs of the automatic 
+# and manual tool changers together to feed to iocontrol.
+net tc-complete <= qdtoolchange.tool-changed => or2.0.in0
+net tool-changed <= hal_manualtoolchange.changed => or2.0.in1
+net tool-changed-ored or2.0.out iocontrol.0.tool-changed
+
+net machine-on <= pyvcp.machine-on => qdtoolchange.machine-on
+net auto-mode <= pyvcp.auto-mode => qdtoolchange.qd-auto
+
+net qd-error <= qdtoolchange.error-flag => pyvcp.error-led
 
 # Hardware inputs from the tool changer to the qdtoolchange component
 net qd-reset <= qdsim.qd-reset => qdtoolchange.qd-complete
@@ -28,25 +48,25 @@ net carousel-cw-command <= qdtoolchange.carousel-cw-command => qdsim.carousel-cw
 net carousel-ccw-command <= qdtoolchange.carousel-ccw-command => qdsim.carousel-ccw-command
 net carousel-home-command <= qdtoolchange.carousel-home-command => qdsim.carousel-home-command
 
-# iotest hardware monitoring
-net tool-change-latched => iotest.request-led
-net tc-complete => iotest.complete-led
-net qd-reset => iotest.reset-led
-net auto-mode => iotest.auto-mode-led
-net claw-open => iotest.claw-open-led
-net tool-in-command => iotest.tool-in-led
-net tool-out-command => iotest.tool-out-led
-net carousel-cw-command => iotest.car-cw-led
-net carousel-ccw-command => iotest.car-ccw-led
-net carousel-home-command => iotest.car-home-led
+# pyvcp hardware monitoring
+net tool-change-latched => pyvcp.request-led
+net tc-complete => pyvcp.complete-led
+net qd-reset => pyvcp.reset-led
+net auto-mode => pyvcp.auto-mode-led
+net claw-open => pyvcp.claw-open-led
+net tool-in-command => pyvcp.tool-in-led
+net tool-out-command => pyvcp.tool-out-led
+net carousel-cw-command => pyvcp.car-cw-led
+net carousel-ccw-command => pyvcp.car-ccw-led
+net carousel-home-command => pyvcp.car-home-led
 
 # qdtoolchange debugging
-net qdtoolchanger-state <= qdtoolchange.current-state => iotest.changer-state-disp
-net qdtoolchanger-cur-tool <= qdtoolchange.current-tool => iotest.cur-toolno-disp
-net qdtoolchanger-homed <= qdtoolchange.is-homed => iotest.homed-led
-net qdtoolchanger-ready <= qdtoolchange.ready => iotest.qd-ready-led
+net qdtoolchanger-state <= qdtoolchange.current-state => pyvcp.changer-state-disp
+net qdtoolchanger-cur-tool <= qdtoolchange.current-tool => pyvcp.cur-toolno-disp
+net qdtoolchanger-homed <= qdtoolchange.is-homed => pyvcp.homed-led
+net qdtoolchanger-ready <= qdtoolchange.ready => pyvcp.qd-ready-led
 
 # Debugging the qdsim component
-net qdsim-pocket <= qdsim.cur-tool-no => iotest.cur-pocket-disp
-net qdsim-state <= qdsim.cur-state-out => iotest.qdsim-state
-net qdsim-arm-spindle <= qdsim.arm-spindle => iotest.arm-spindle
+net qdsim-pocket <= qdsim.cur-tool-no => pyvcp.cur-pocket-disp
+net qdsim-state <= qdsim.cur-state-out => pyvcp.qdsim-state
+net qdsim-arm-spindle <= qdsim.arm-spindle => pyvcp.arm-spindle
