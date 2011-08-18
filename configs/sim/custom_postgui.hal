@@ -30,23 +30,6 @@ net program-single-step pyvcp.step         =>  halui.program.step
 # Reset the spindle VFD
 #net reset-vfd <= pyvcp.vfd-reset => hm2_5i20.0.gpio.064.out
 
-# Manual Spindle Speed settings
-net man-speed <= pyvcp.use-man-speed => hal_spindlemanager.use-man-speed
-net man-sp-speed <= pyvcp.spindle-man-speed => hal_spindlemanager.mspeed-in
-net man-sp-set <= pyvcp.set-sspeed => hal_spindlemanager.mspeed-set
-# Display of RPM. Pick up signals on existing nets
-net spindle-vel-fb => pyvcp.spindle-rpm
-net sp-speed => pyvcp.commanded-rpm
-net sp-speed-error <= hal_spindlemanager.sspeed-error => pyvcp.sspeed-error
-net motor-speed-limited <= hal_spindlemanager.mspeed-limit => pyvcp.motor-limited
-# Manual gear changes
-net man-gear <= pyvcp.use-man-gear => hal_spindlemanager.use-man-gear
-net man-gear-no-f <= pyvcp.man-gear-sel conv-float-s32.0.in
-net man-gear-no-s32 <= conv-float-s32.0.out => hal_spindlemanager.gear-no
-
-net man-gear-out-s32 <= hal_spindlemanager.gear-no-out => conv-s32-float.0.in
-# If we need the gear-out for pyvcp, connect it here.
-net man-gear-out-f <= conv-s32-float.0.out
 
 # **** The following mdi-comands are specified in the machine named INI file under [HALUI] heading
 # **** command 00 - rapid to Z 0 ( G0 Z0 )
