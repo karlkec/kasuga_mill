@@ -21,14 +21,6 @@ loadrt sim_encoder num_chan=3
 # software encoder counters, 3 for feedback, 3 for actual axis pos
 loadrt encoder num_chan=6
 
-# Our spindle controller
-loadrt spindlemotor count=1
-# Spindle Motor simulator
-loadrt motorsim count=1
-
-addf spindlemotor.0 servo-thread
-addf motorsim.0 servo-thread
-
 # add encoder counter and simulator functions to high speed thread
 addf sim-encoder.make-pulses base-thread
 addf encoder.update-counters base-thread
