@@ -293,37 +293,4 @@ setp encoder.1.latch-falling 1
 setp encoder.2.latch-rising 1
 setp encoder.2.latch-falling 1
 
-#*******************
-#  SPINDLE S
-#*******************
-# Connections from the motor encoder to spindlemotor
-net spindle-enc-fb <= motorsim.0.output => spindlemotor.0.actual-speed
-net spindle-enc-revs <= motorsim.0.pos => spindlemotor.0.motor-pos-in
-
-# Connections from spindlemotor to motion
-net spindle-vel-fb <= spindlemotor.0.spindle-rpm => motion.spindle-speed-in
-net spindle-revs <= spindlemotor.0.spindle-pos-out => motion.spindle-revs
-net spindle-at-speed spindlemotor.0.at-speed => motion.spindle-at-speed
-
-# To fool axis into displaying a spindle reverse button
-net dummy-reverse motion.spindle-reverse
-
-# Connections from spindlemotor to the VFD. The VFD enable input is wired TRUE,
-#  otherwise it takes a long time to coast a stop.
-net spindle-vel-output <= spindlemotor.0.output => motorsim.0.commanded-speed
-net spindle-forward spindlemotor.0.forward => motorsim.0.forward
-net spindle-reverse spindlemotor.0.reverse => motorsim.0.reverse
-
-# Parameter for spindle control
-setp spindlemotor.0.speed-tolerance 1.10
-# Zero tolerance as a fraction of nominal speed for the current gear.
-setp spindlemotor.0.zero-tolerance 0.01
-# Acceleration and deceleation in RPM/sec
-setp spindlemotor.0.accel 500
-setp spindlemotor.0.decel 500
-# Low-pass filter on encoder output.
-setp spindlemotor.0.spindle-lpf 1
-
-# And spindle motor simulation
-setp motorsim.0.accel 500
 
