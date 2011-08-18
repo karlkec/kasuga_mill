@@ -509,7 +509,7 @@ FUNCTION(_) {
 	error_flag = (error_code != 0);
 	tool_changed = (done && claw_open_deb);
 	is_homed = homed_flag;
-	ready = (qd_auto_deb && claw_open_deb && !error_flag);
+	ready = ((cur_state == STATE_IDLE) && qd_auto_deb && claw_open_deb);
 }
 
 EXTRA_SETUP() {

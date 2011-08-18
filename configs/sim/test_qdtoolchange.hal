@@ -23,7 +23,7 @@ net machine-on <= iotest.machine-on => qdtoolchange.machine-on
 net qd-error <= qdtoolchange.error-flag => iotest.error-led
 
 # Hardware inputs from the tool changer to the qdtoolchange component
-net qd-reset <= qdsim.qd-complete => qdtoolchange.qd-complete
+net qd-reset <= qdsim.qd-reset => qdtoolchange.qd-complete
 net claw-open <= qdsim.claw-open-out => qdtoolchange.claw-open
 net auto-mode <= iotest.auto-mode => qdtoolchange.qd-auto
 
