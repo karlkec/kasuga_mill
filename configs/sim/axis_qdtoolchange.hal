@@ -1,20 +1,25 @@
-############# HAL config for the qdtoolchange component #####################
+############# Tool Changer #####################
 
 loadrt qdtoolchange
+loadrt qdsim
 addf qdtoolchange servo-thread
+addf qdsim servo-thread
 
-net tool-change-button <= iotest.change-tool-btn => flipflop.0.clk
+# The change tool button gets a S-R flip-flop, to simulate emc's action
 net tool-change-latched <= flipflop.0.out => qdtoolchange.tool-change
 net tool-conv <= iotest.new-tool-no => conv-float-s32.0.in
+
 net new-tool <= conv-float-s32.0.out => qdtoolchange.tool-num
 net tc-complete <= qdtoolchange.tool-changed => flipflop.0.reset 
+
 net machine-on <= iotest.machine-on => qdtoolchange.machine-on
+net auto-mode <= iotest.auto-mode => qdtoolchange.qd-auto
+
 net qd-error <= qdtoolchange.error-flag => iotest.error-led
 
 # Hardware inputs from the tool changer to the qdtoolchange component
 net qd-reset <= qdsim.qd-reset => qdtoolchange.qd-complete
 net claw-open <= qdsim.claw-open-out => qdtoolchange.claw-open
-net auto-mode <= iotest.auto-mode => qdtoolchange.qd-auto
 
 # Output commands from qdtoolchange component to tool changer hardware
 net tool-out-command <= qdtoolchange.tool-out-command => qdsim.tool-out-command
@@ -45,13 +50,3 @@ net qdtoolchanger-ready <= qdtoolchange.ready => iotest.qd-ready-led
 net qdsim-pocket <= qdsim.cur-tool-no => iotest.cur-pocket-disp
 net qdsim-state <= qdsim.cur-state-out => iotest.qdsim-state
 net qdsim-arm-spindle <= qdsim.arm-spindle => iotest.arm-spindle
-
-# debugging
-loadusr halmeter
-
-# start 
-start
-
-# wait for iotest to close before ending hal session
-waitusr iotest
-
