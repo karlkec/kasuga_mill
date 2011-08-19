@@ -325,7 +325,7 @@ FUNCTION(_) {
 					cur_state = STATE_INIT;
 				}
 			} else if(!tool_change && done) {
-				/* Release the ack only when the tool_change goes FALSE. */
+				/* Release the done flag only when the tool_change goes FALSE. */
 				done = FALSE;
 			}
 			break; // STATE_IDLE
