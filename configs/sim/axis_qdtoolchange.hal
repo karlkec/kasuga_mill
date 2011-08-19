@@ -21,7 +21,7 @@ net tool-change-auto <= and2.0.out => qdtoolchange.tool-change
 net tool-change-man  <= and2.1.out => hal_manualtoolchange.change
 
 net tool-prep-number <= iocontrol.0.tool-prep-number => hal_manualtoolchange.number 
-net tool-prev-number => qdtoolchange.tool-num
+net tool-prep-number => qdtoolchange.tool-num
 
 # Or the change complete outputs of the automatic 
 # and manual tool changers together to feed to iocontrol.
