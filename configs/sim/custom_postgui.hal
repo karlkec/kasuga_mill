@@ -45,7 +45,39 @@ net MDI-zero_Y          pyvcp.MDI-zeroy         =>  halui.mdi-command-03
 net MDI-zero_Z          pyvcp.MDI-zeroz         =>  halui.mdi-command-04
 net MDI-clear-offset    pyvcp.MDI-clear-offset  =>  halui.mdi-command-05
 
-# Quickdraw Tool Changer GUI Interface
+############### Quickdraw Tool Changer GUI Interface ################
+
+# Auto-Manual radio button
+net sel-man-change <= pyvcp.man-auto-sel.Manual => and2.1.in1
+net sel-auto-change <= pyvcp.man-auto.Auto => and2.0.in1
+
+# QD Auto mode. For simulation only
+net auto-mode <= pyvcp.qd-auto-mode => qdtoolchange.qd-auto
+
+# QD Error
+net qd-error <= qdtoolchange.error-flag => pyvcp.error-led
+
+# pyvcp hardware monitoring, for debugging
+net tool-change-latched => pyvcp.request-led
+net tc-complete => pyvcp.complete-led
+net qd-reset => pyvcp.reset-led
+net auto-mode => pyvcp.auto-mode-led
+net claw-open => pyvcp.claw-open-led
+net tool-in-command => pyvcp.tool-in-led
+net tool-out-command => pyvcp.tool-out-led
+net carousel-cw-command => pyvcp.car-cw-led
+net carousel-ccw-command => pyvcp.car-ccw-led
+net carousel-home-command => pyvcp.car-home-led
+net qdtoolchanger-state <= qdtoolchange.current-state => pyvcp.changer-state-disp
+net qdtoolchanger-cur-tool <= qdtoolchange.current-tool => pyvcp.cur-toolno-disp
+net qdtoolchanger-homed <= qdtoolchange.is-homed => pyvcp.homed-led
+net qdtoolchanger-ready <= qdtoolchange.ready => pyvcp.qd-ready-led
+
+# Debugging the qdsim component
+net qdsim-pocket <= qdsim.cur-tool-no => pyvcp.cur-pocket-disp
+net qdsim-state <= qdsim.cur-state-out => pyvcp.qdsim-state
+net qdsim-arm-spindle <= qdsim.arm-spindle => pyvcp.arm-spindle
+
 
 # Dump the setup to a file, to keep a record of what goes to what.
 save all hal_config.txt
