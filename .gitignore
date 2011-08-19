@@ -1,4 +1,4 @@
 *.sw*
 *~
-autosave.halscope
-hal_config.txt
+*/autosave.halscope
+*/hal_config.txt
