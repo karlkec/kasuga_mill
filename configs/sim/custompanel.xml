@@ -108,11 +108,11 @@
 				<bd>3</bd>
 				<vbox>
 					<hbox>
-						<radiobutton><choices>["Auto","Manual"]</choices><halpin>"man-auto-sel"</halpin></radiobutton>
-					</hbox>
-					<hbox>
 						<label><text>"Quickdraw Auto Switch:"</text></label>
 						<checkbutton><halpin>"qd-auto-mode"</halpin></checkbutton>
+					</hbox>
+					<hbox>
+						<radiobutton><choices>["Auto","Manual"]</choices><halpin>"man-auto-sel"</halpin></radiobutton>
 					</hbox>
 					<hbox>
 						<label><text>"Current Tool No:"</text></label>
