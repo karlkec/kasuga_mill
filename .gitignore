@@ -1,4 +1,5 @@
 *.sw*
 *~
+configs/sim/autosave.halscope
 */autosave.halscope
 */hal_config.txt
