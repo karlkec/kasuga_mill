@@ -297,9 +297,8 @@ FUNCTION(_) {
 		prev_state = cur_state;
 	} 
 
-	/* If the machine is off, don't do anything. Turn off all the outputs and stay in the error state. */
+	/* If the machine is off, don't do anything. Turn off all the outputs. */
 	if(!is_on) {
-		cur_state = STATE_ERROR;
 		tool_in_command = FALSE;
 		tool_out_command = FALSE;
 		carousel_cw_command = FALSE;
@@ -527,9 +526,9 @@ FUNCTION(_) {
 			break;
 
 		case STATE_ERROR:
-			/* Display the error message, then do nothing, but recover when the machine is 
-			 *  from off to on. */
-			if(state_changed)
+			/* If the machine is on, display the error message, then do nothing, but recover when the machine is 
+			 *  turned from off to on. */
+			if(state_changed && is_on)
 				rtapi_print_msg(RTAPI_MSG_ERR,error_str[error_output]);
 			else if(!was_on && is_on) {
 				// We always go back to the idle state, but need to clear the stack
