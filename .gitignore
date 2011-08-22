@@ -1,5 +1,7 @@
 *.sw*
 *~
+*.bak
+*.tbl
 configs/sim/autosave.halscope
 */autosave.halscope
 */hal_config.txt

@@ -50,7 +50,7 @@ net auto-mode <= pyvcp.qd-auto-mode => qdtoolchange.qd-auto
 net qd-error <= qdtoolchange.error-flag => pyvcp.error-led
 
 # pyvcp hardware monitoring, for debugging
-net tool-change-latched => pyvcp.request-led
+net tool-change-auto => pyvcp.request-led
 net tc-complete => pyvcp.complete-led
 net qd-reset => pyvcp.reset-led
 net auto-mode => pyvcp.auto-mode-led
