@@ -1,7 +1,9 @@
-############# Tool Changer #####################
+############# Tool Changers, both manual and automatic #####################
+loadusr -W hal_manualtoolchange
 
 loadrt qdtoolchange
 loadrt qdsim
+
 addf qdtoolchange servo-thread
 addf qdsim servo-thread
 loadrt or2 count=1

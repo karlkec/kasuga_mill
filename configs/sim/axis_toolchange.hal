@@ -1,7 +1,0 @@
-loadrt [EMCMOT]EMCMOT servo_period_nsec=[ECMOT]SERVO_PERIOD num_joints=[TRAJ]AXES
-loadrt qdtoolchanger
-loadrt qdsim
-
-addf qdtoolchanger tt
-addf qdsim tt
-
