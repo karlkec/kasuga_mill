@@ -53,6 +53,7 @@ pin out bit is_homed "True when tool changer carousel is homed";
 pin out bit ready "True when qd_auto and claw_open are both TRUE";
 pin out unsigned error_code "Error Output. See description";
 pin out bit error_flag "Goes TRUE when in an error condition";
+pin out bit abort "Unrecoverable error";
 
 // For debugging
 pin out signed current_tool "For debugging. Tool number currently in position. Will be zero until homed";
