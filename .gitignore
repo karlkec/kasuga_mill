@@ -6,3 +6,4 @@ configs/sim/autosave.halscope
 */autosave.halscope
 configs/sim/hal_config.txt
 configs/SDHS_EMC_01/backups/*
+configs/SDHS_EMC_01/make_backup.sh
