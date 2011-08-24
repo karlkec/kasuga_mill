@@ -221,6 +221,7 @@ static bool was_completed;
 static bool was_on; // Previous state of pgm_running
 static int distance;
 static bool was_error; // Previous pass was in error state.
+static bool abort_out; // Abort the currently-running program
 
 
 /* The state LIFO stack array works from index 0 up. The bottom state is always
@@ -529,12 +530,24 @@ FUNCTION(_) {
 		case STATE_ERROR:
 			/* If the machine is on, display the error message, then do nothing, but recover when the machine is 
 			 *  turned from off to on. */
-			if(state_changed && is_on)
+			if(state_changed && is_on) {
+				if(error_output == ERROR_INVALID_NEW_TOOL) {
+					/* The error is due to an invalid tool number being passed. This error isn't recoverable,
+					 *  in that the program must be aborted. Set the abort output pin TRUE and wait for
+					 *  the tool_change input to go FALSE. */
+					abort_out = TRUE;
+				}
 				rtapi_print_msg(RTAPI_MSG_ERR,error_str[error_output]);
-			else if(!was_on && is_on) {
-				// We always go back to the idle state, but need to clear the stack
+			} else if (abort_out && !tool_change) {
+				/* We are aborting due to invalid tool number and the tool change input has 
+				 *  gone false. Set the abort output FALSE. */
+				abort_out = FALSE;
+			} else if(!was_on && is_on) {
+				// We always go back to the idle state, but need to clear the state queue and 
+				//  return to STATE_IDLE.
 				state_index = 0;
 				cur_state = STATE_IDLE;
+				abort_out = FALSE;
 				error_output = 0;
 			}
 			break; // STATE_ERROR
@@ -546,6 +559,7 @@ FUNCTION(_) {
 	tool_changed = (done && claw_open_deb);
 	is_homed = homed_flag;
 	ready = ((cur_state == STATE_IDLE) && qd_auto_deb && claw_open_deb);
+	abort = abort_out;
 }
 
 EXTRA_SETUP() {
