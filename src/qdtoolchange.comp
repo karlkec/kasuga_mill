@@ -38,48 +38,55 @@ component qdtoolchange "EMC HAL component to manage Dana Summit Quickdraw tool c
 
 pin in bit tool_change "Request a tool change. Normally comes from iocontrol.0.tool-change";
 pin in signed tool_num "The number of the desired new tool. Range is 0 to the turret-capacity parameter (see below). Normally wired to iocontrol.0.tool-prep-number";
-pin in bit qd_complete "Reset signal from the Quickdraw Tool Changer that the current operation is complete";
 pin in bit machine_on "Tells this component that the machine is on. Used to reset error conditions. Normally wired to halui.machine.is-on";
-pin in bit qd_auto "Indication that the tool changer is in auto mode. This can be obtained with a connection to pin 9 (+12V) of the tool changer M-interface connector";
-pin in bit claw_open "Indication that the claw is being held in the opon position. This, along with the qd_complete bit above, means that the hardware is finished with the tool change";
+pin in bit qd_complete
+"""Reset signal from the Quickdraw Tool Changer that the current operation is complete. This should be wired to the contact closure 
+which occurs between the white/black and grey wires (pins 11 and 12 of J7) of the Quickdraw M-Function cable.""";
+pin in bit qd_auto """Indication that the tool changer is in auto mode. This can be obtained with a connection to pin 9 (+12V) of the tool changer M-interface connector J7, 
+using pin 8 of J11 as a ground reference. J11 is located directly below J7 in the tool changer electronics.""";
+pin in bit claw_open """Indication that the claw is being held in the opon position. This, along with the qd_complete bit above, means that the Quickdraw hardware is finished 
+with the tool change. This should be wired to the contact closure which occurs between the white/red and white/orn wires in the M-Function cable from the Quickdraw hardware.""";
 
-pin out bit tool_in_command "Tool-In command to the tool changer. Moves the arm to the spindle";
-pin out bit tool_out_command "Tool-Out command to the tool changer. Moves the arm to the carousel";
-pin out bit carousel_cw_command "Turret CW command to the tool changer. Moves the carousel clockwise";
-pin out bit carousel_ccw_command "Turret CCW command to the tool changer. Moves the carousel counterclockwise";
-pin out bit carousel_home_command "Turret Home command to the tool changer.";
-pin out bit tool_changed "True when the a tool change is complete. Normally this is connected to iocontrol.0.tool-changed";
-pin out bit is_homed "True when tool changer carousel is homed";
-pin out bit ready "True when qd_auto and claw_open are both TRUE";
-pin out unsigned error_code "Error Output. See description";
-pin out bit error_flag "Goes TRUE when in an error condition";
-pin out bit abort "Unrecoverable error";
+/* Pins to control the Quickdraw hardware */
+pin out bit tool_in_command "Tool-In command to the tool changer, to remove the tool from the carousel and lock it into the spindle. This should be connected to the Orange wire of the M-Function cable (pin 5 of connector J7).";
+pin out bit tool_out_command "Tool-Out command to the tool changer, to remove the tool from the spindle and place it in the carousel. This should be connected to the Green wire of the M-Function cable (pin 4 of connector J7).";
+pin out bit carousel_cw_command "Turret CW command to the tool changer. This should be connected to the Brown wire of the M-Function cable (pin 7 of connector J7).";
+pin out bit carousel_ccw_command "Turret CCW command to the tool changer. This should be connected to the Yellow wire of the M-Function cable (pin 6 of connector J7).";
+pin out bit carousel_home_command "Turret Home command to the tool changer. This should be connected to the Blue wire of the M-Function cable (pin 6 of connector J7).";
+
+/* Output pins for interface and statua. */
+pin out bit tool_changed "True when the a tool change is complete. Normally this is connected to iocontrol.0.tool-changed.";
+pin out bit is_homed "True when tool changer carousel has been homed. If the tool changer is switched from AUTO mode, it is assumed to be unhomed since manual movement of the carousel may have occurred.";
+pin out bit ready "True when qd_auto and claw_open are both TRUE.";
+pin out unsigned error_code "Error Code output. See description for codes.";
+pin out bit error_flag "Goes TRUE when this component is in an error condition.";
+pin out bit abort "Unrecoverable error. This is should be wired to stop the program, which will cancel the tool-change command. Otherwise, a latchup condition can occur if an unsupported tool number is requested.";
+pin out signed current_tool "Carousel pocket number currently in position. Will be zero if not homed.";
 
 // For debugging
-pin out signed current_tool "For debugging. Tool number currently in position. Will be zero until homed";
 pin out signed current_state "For debugging. State of the internal state machine";
 
+/* Parameters for controlling timouts and capacity */
+param rw unsigned changer_capacity=24 "Max number of tools the tool changer is capable of handling. Default = 24";
 param rw unsigned carousel_home_timeout=45 "Maximum time in seconds to allow the carousel to home. Default = 45 sec";
 param rw unsigned carousel_move_timeout=3 "Maximum time in seconds to allow the carousel to move one tool position. Default = 3 sec";
 param rw unsigned arm_move_timeout=15.0 "Maximum time in seconds to allow for moving a tool from the carousel to or from the spindle. Default = 15 sec";
-param rw unsigned claw_open_timeout=1.0 "Maximum time in seconds to allow the claw to open after a tool in or tool out is complete";
-param rw unsigned complete_max_time=1000 "Maximum time in MILLIseconds to allow the complete input to remain high before flagging an error. Default = 1000 msec";
-param rw unsigned changer_capacity=24 "Max number of tools the tool changer is capable of handling. Default = 24";
-param rw unsigned debounce_period=40 "Time in MILLIseconds for debouncing. Default = 40 msec";
+param rw unsigned claw_open_timeout=1000 "Maximum time in MILLIseconds to allow the claw to open after a tool in or tool out is complete";
+param rw unsigned complete_max_time=1000 "Maximum time in MILLIseconds to allow the complete input to remain high before issuing an error. Default = 1000 msec";
+param rw unsigned debounce_period=40 "Time in MILLIseconds for all debouncing. Default = 40 msec";
 
 description """
 qdtoolchange manages the Dana Summit Quickdraw tool changer.o
 
-The \\fBQuickdraw\\fR tool changer hardware has five inputs and two outputs.
-The five inputs start the various actions of the changer, and the two outputs
-give feedback on its operation. The RESET output is a contact closure which
-signals that the previously-commanded operation is complete. In addition, this
-component requires an input from the +12V supply on pin 12 of the M-POSITITION
-connector J7. This input is used to determine whether the tool changer front
-panel is switched to the AUTO position.  If the switched is changed to MAN or
-LOC, the logic here assumes the operator may have moved the carousel and
-unhomes the carousel. This will require a homing operation before any tools can
-be used.
+The \\fBDana Summit Quickdraw\\fR tool changer hardware has five inputs and two
+outputs.  The five inputs start the various actions of the changer, and the two
+outputs give feedback on its operation. The RESET output is a contact closure
+between pins 11 and 12 of the M-Function connector, which signals that the
+previously-commanded operation is complete. The This input is used to determine
+whether the tool changer front panel is switched to the AUTO position.  If the
+switched is changed to MAN or LOC, the logic here assumes the operator may have
+moved the carousel and unhomes the carousel. This will require a homing
+operation before any tools can be used.
 
 To allow manual or automatic tool changes, the iocontrol.tool-change hal signal
 should be directed to either a manual tool change component such as
@@ -520,7 +527,7 @@ FUNCTION(_) {
 			} else if(claw_open_deb) {
 				/* Claw opened in time. OK to move on. */
 				cur_state = dequeue_state();
-			} else if(timer > claw_open_timeout * NSPERSEC) {
+			} else if(timer > claw_open_timeout * NSPERMSEC) {
 				/* Claw took too long to open */
 				error_output = ERROR_CLAW_OPEN_TIMEOUT;
 				cur_state = STATE_ERROR;
