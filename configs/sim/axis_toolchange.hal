@@ -33,6 +33,8 @@ net tool-changed-ored or2.0.out iocontrol.0.tool-changed
 
 # Machine on bit, to reset errors in the tool changer
 net machine-on <= halui.machine.is-on => qdtoolchange.machine-on
+# Tool changer command to abort the running program
+net qd-abort <= qdtoolchange.abort => halui.program.stop
 
 # Hardware inputs from the simulated tool changer to the qdtoolchange component
 net qd-reset <= qdsim.qd-reset => qdtoolchange.qd-complete
@@ -44,4 +46,5 @@ net tool-in-command <= qdtoolchange.tool-in-command => qdsim.tool-in-command
 net carousel-cw-command <= qdtoolchange.carousel-cw-command => qdsim.carousel-cw-command
 net carousel-ccw-command <= qdtoolchange.carousel-ccw-command => qdsim.carousel-ccw-command
 net carousel-home-command <= qdtoolchange.carousel-home-command => qdsim.carousel-home-command
+
 
