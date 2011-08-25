@@ -60,12 +60,12 @@ net tool-out-command => pyvcp.tool-out-led
 net carousel-cw-command => pyvcp.car-cw-led
 net carousel-ccw-command => pyvcp.car-ccw-led
 net carousel-home-command => pyvcp.car-home-led
+net qd-abort => pyvcp.qd-abort-led
 
 net qdtoolchanger-state <= qdtoolchange.current-state => pyvcp.changer-state-disp
 net qdtoolchanger-cur-tool <= qdtoolchange.current-tool => pyvcp.cur-toolno-disp
 net qdtoolchanger-homed <= qdtoolchange.is-homed => pyvcp.homed-led
 net qdtoolchanger-ready <= qdtoolchange.ready => pyvcp.qd-ready-led
-net qdtoolchanger-abort <= qdtoolchange.abort => pyvcp.qd-abort-led
 
 # Debugging the qdsim component
 #net qdsim-pocket <= qdsim.cur-tool-no => pyvcp.cur-pocket-disp
