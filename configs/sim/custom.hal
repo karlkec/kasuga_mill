@@ -39,6 +39,3 @@ net spindle-enable      => hm2_5i20.0.pwmgen.03.enable
 # VFD Spindle Drive Fault -- There is an led and a button in the pyvcp to 
 #  reset it.
 net vfd-ok motion.enable <= hm2_5i20.0.gpio.052.in_not
-
-# Tool changer abort program
-net qd-abort <= qdtoolchanger.abort => axis.stop-pgm
