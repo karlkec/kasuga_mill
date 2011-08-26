@@ -172,6 +172,10 @@
 								<label><text>"QD Claw Open"</text></label>
 								<led><off_color>"black"</off_color><size>15</size><halpin>"claw-open-led"</halpin></led>
 							</hbox>
+							<hbox>
+								<label><text>"Abort"</text></label>
+								<led><off_color>"black"</off_color><size>15</size><halpin>"qd-abort-led"</halpin></led>
+							</hbox>
 						</vbox>
 						<vbox>
 							<hbox>
