@@ -151,30 +151,30 @@ function _ nofp;
 
 typedef enum {
 	ERROR_NO_ERROR = 0,
-	ERROR_INVALID_NEW_TOOL,
-	ERROR_ARM_TO_CAROUSEL_FAIL,
-	ERROR_ARM_TO_SPINDLE_FAIL,
-	ERROR_QD_COMPLETE_STUCK_LOW,
-	ERROR_QD_COMPLETE_STUCK_HIGH,
-	ERROR_CAROUSEL_MOVE_FAIL,
-	ERROR_CAROUSEL_HOME_FAIL,
-	ERROR_NOT_AUTO_MODE,
-	ERROR_NOT_CLAW_OPEN,
-	ERROR_CLAW_OPEN_TIMEOUT,
+	ERROR_INVALID_NEW_TOOL, // 1
+	ERROR_ARM_TO_CAROUSEL_FAIL, // 2
+	ERROR_ARM_TO_SPINDLE_FAIL, // 3
+	ERROR_QD_COMPLETE_STUCK_LOW, // 4
+	ERROR_QD_COMPLETE_STUCK_HIGH, // 5
+	ERROR_CAROUSEL_MOVE_FAIL, // 6
+	ERROR_CAROUSEL_HOME_FAIL, // 7
+	ERROR_NOT_AUTO_MODE, // 8
+	ERROR_NOT_CLAW_OPEN, // 9
+	ERROR_CLAW_OPEN_TIMEOUT, // 10
 	NUM_ERROR_CODES
 } error_codes;
 
 const char *error_str[] = {
 	"Quickdraw Tool Changer -- No Error",
 	"Quickdraw Tool Changer -- Tool Number out of Range",
-	"Quickdraw Tool Changer -- Too Long to Move to Carousel",
-	"Quickdraw Tool Changer -- Too Long to Move to Spindle",
+	"Quickdraw Tool Changer -- Took Too Long to Move to Carousel",
+	"Quickdraw Tool Changer -- Took Too Long to Move to Spindle",
 	"Quickdraw Tool Changer -- Reset Line Did Not Acuate",
 	"Quickdraw Tool Changer -- RESET Relay Stuck Closed",
-	"Quickdraw Tool Changer -- Too Long to Move the Carousel",
-	"Quickdraw Tool Changer -- Too Long to Home the Carousel",
+	"Quickdraw Tool Changer -- Took Too Long to Move the Carousel",
+	"Quickdraw Tool Changer -- Took Too Long to Home the Carousel",
 	"Quickdraw Tool Changer -- Not Turned On in AUTO Mode",
-	"Quickdraw Tool Changer -- Claw not Reported Open. Got Compressed Air?",
+	"Quickdraw Tool Changer -- Claw not Open. Got Compressed Air?",
 	"Quickdraw Tool Changer -- Claw Open Timed Out. Got Compressed Air?",
 };
 
