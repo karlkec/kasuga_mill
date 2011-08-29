@@ -35,7 +35,7 @@ net tool-changed-ored or2.compl.out iocontrol.0.tool-changed
 # Machine on bit, to reset errors in the tool changer
 net machine-on <= halui.machine.is-on => qdtoolchange.machine-on
 # Tool changer command to abort the running program
-net qd-abort <= qdtoolchange.abort => halui.program.stop
+net qd-fault <= qdtoolchange.fault => halui.program.stop
 
 # Hardware inputs from the tool changer hardware to the qdtoolchange component
 net qd-reset <= hm2_5i20.0.gpio.054.in_not => qdtoolchange.qd-complete

@@ -60,7 +60,7 @@ net tool-out-command => pyvcp.tool-out-led
 net carousel-cw-command => pyvcp.car-cw-led
 net carousel-ccw-command => pyvcp.car-ccw-led
 net carousel-home-command => pyvcp.car-home-led
-net qd-abort => pyvcp.qd-abort-led
+net qd-fault => pyvcp.qd-fault-led
 
 net qdtoolchanger-state <= qdtoolchange.current-state => pyvcp.changer-state-disp
 net qdtoolchanger-cur-tool <= qdtoolchange.current-tool => pyvcp.cur-toolno-disp

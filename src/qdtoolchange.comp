@@ -60,7 +60,7 @@ pin out bit is_homed "True when tool changer carousel has been homed. If the too
 pin out bit ready "True when qd_auto and claw_open are both TRUE.";
 pin out unsigned error_code "Error Code output. See description for codes.";
 pin out bit error_flag "Goes TRUE when this component is in an error condition.";
-pin out bit abort "Unrecoverable error. This is should be wired to stop the program, which will cancel the tool-change command. Otherwise, a latchup condition can occur if an unsupported tool number is requested.";
+pin out bit fault "Unrecoverable error. This is should be wired to stop the program, which will cancel the tool-change command. Otherwise, a latchup condition can occur if an unsupported tool number is requested.";
 pin out signed current_tool "Carousel pocket number currently in position. Will be zero if not homed.";
 
 // For debugging
@@ -228,7 +228,7 @@ static bool was_completed;
 static bool was_on; // Previous state of pgm_running
 static int distance;
 static bool was_error; // Previous pass was in error state.
-static bool abort_out; // Abort the currently-running program
+static bool fault_out; // Abort the currently-running program
 
 
 /* The state LIFO stack array works from index 0 up. The bottom state is always
@@ -540,21 +540,21 @@ FUNCTION(_) {
 			if(state_changed && is_on) {
 				if(error_output == ERROR_INVALID_NEW_TOOL) {
 					/* The error is due to an invalid tool number being passed. This error isn't recoverable,
-					 *  in that the program must be aborted. Set the abort output pin TRUE and wait for
+					 *  in that the program must be faulted. Set the fault output pin TRUE and wait for
 					 *  the tool_change input to go FALSE. */
-					abort_out = TRUE;
+					fault_out = TRUE;
 				}
 				rtapi_print_msg(RTAPI_MSG_ERR,error_str[error_output]);
-			} else if (abort_out && !tool_change) {
-				/* We are aborting due to invalid tool number and the tool change input has 
-				 *  gone false. Set the abort output FALSE. */
-				abort_out = FALSE;
+			} else if (fault_out && !tool_change) {
+				/* We are faulting due to invalid tool number and the tool change input has 
+				 *  gone false. Set the fault output FALSE. */
+				fault_out = FALSE;
 			} else if(!was_on && is_on) {
 				// We always go back to the idle state, but need to clear the state queue and 
 				//  return to STATE_IDLE.
 				state_index = 0;
 				cur_state = STATE_IDLE;
-				abort_out = FALSE;
+				fault_out = FALSE;
 				error_output = 0;
 			}
 			break; // STATE_ERROR
@@ -566,7 +566,7 @@ FUNCTION(_) {
 	tool_changed = (done && claw_open_deb);
 	is_homed = homed_flag;
 	ready = ((cur_state == STATE_IDLE) && qd_auto_deb && claw_open_deb);
-	abort = abort_out;
+	fault = fault_out;
 }
 
 EXTRA_SETUP() {
