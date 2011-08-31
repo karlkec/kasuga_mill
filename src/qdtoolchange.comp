@@ -37,30 +37,44 @@
 component qdtoolchange "EMC HAL component to manage Dana Summit Quickdraw tool changer";
 
 pin in bit tool_change "Request a tool change. Normally comes from iocontrol.0.tool-change";
-pin in signed tool_num "The number of the desired new tool. Range is 0 to the turret-capacity parameter (see below). Normally wired to iocontrol.0.tool-prep-number";
-pin in bit machine_on "Tells this component that the machine is on. Used to reset error conditions. Normally wired to halui.machine.is-on";
-pin in bit qd_complete
-"""Reset signal from the Quickdraw Tool Changer that the current operation is complete. This should be wired to the contact closure 
-which occurs between the white/black and grey wires (pins 11 and 12 of J7) of the Quickdraw M-Function cable.""";
-pin in bit qd_auto """Indication that the tool changer is in auto mode. This can be obtained with a connection to pin 9 (+12V) of the tool changer M-interface connector J7, 
-using pin 8 of J11 as a ground reference. J11 is located directly below J7 in the tool changer electronics.""";
-pin in bit claw_open """Indication that the claw is being held in the opon position. This, along with the qd_complete bit above, means that the Quickdraw hardware is finished 
-with the tool change. This should be wired to the contact closure which occurs between the white/red and white/orn wires in the M-Function cable from the Quickdraw hardware.""";
+pin in signed tool_num "The number of the desired new tool. Range is 0 to the turret-capacity \
+parameter (see below). Normally wired to iocontrol.0.tool-prep-number";
+pin in bit machine_on "Tells this component that the machine is on. Used to reset error conditions. \
+Normally wired to halui.machine.is-on";
+pin in bit qd_complete "Reset signal from the Quickdraw Tool Changer that the current operation is complete.\
+This should be wired to the contact closure which occurs between the white/black and grey wires (pins 11 and 12 of J7) \
+of the Quickdraw M-Function cable.";
+pin in bit qd_auto "Indication that the tool changer is in auto mode. This can be obtained with a \
+connection to pin 9 (+12V) of the tool changer M-interface connector J7, using pin 8 of J11 as a \
+ground reference. J11 is located directly below J7 in the tool changer electronics.";
+pin in bit claw_open "Indication that the claw is being held in the opon position. This, along \
+with the qd_complete bit above, means that the Quickdraw hardware is finished with the tool change. \
+This should be wired to the contact closure which occurs between the white/red and white/orn wires \
+in the M-Function cable from the Quickdraw hardware.";
 
 /* Pins to control the Quickdraw hardware */
-pin out bit tool_in_command "Tool-In command to the tool changer, to remove the tool from the carousel and lock it into the spindle. This should be connected to the Orange wire of the M-Function cable (pin 5 of connector J7).";
-pin out bit tool_out_command "Tool-Out command to the tool changer, to remove the tool from the spindle and place it in the carousel. This should be connected to the Green wire of the M-Function cable (pin 4 of connector J7).";
-pin out bit carousel_cw_command "Turret CW command to the tool changer. This should be connected to the Brown wire of the M-Function cable (pin 7 of connector J7).";
-pin out bit carousel_ccw_command "Turret CCW command to the tool changer. This should be connected to the Yellow wire of the M-Function cable (pin 6 of connector J7).";
-pin out bit carousel_home_command "Turret Home command to the tool changer. This should be connected to the Blue wire of the M-Function cable (pin 6 of connector J7).";
+pin out bit tool_in_command "Tool-In command to the tool changer, to remove the tool from the carousel \
+and lock it into the spindle. This should be connected to the Orange wire of the M-Function cable \
+(pin 5 of connector J7).";
+pin out bit tool_out_command "Tool-Out command to the tool changer, to remove the tool from the spindle \
+and place it in the carousel. This should be connected to the Green wire of the M-Function cable \
+(pin 4 of connector J7).";
+pin out bit carousel_cw_command "Turret CW command to the tool changer. This should be connected to the \
+Brown wire of the M-Function cable (pin 7 of connector J7).";
+pin out bit carousel_ccw_command "Turret CCW command to the tool changer. This should be connected to the \
+Yellow wire of the M-Function cable (pin 6 of connector J7).";
+pin out bit carousel_home_command "Turret Home command to the tool changer. This should be connected to the \
+Blue wire of the M-Function cable (pin 6 of connector J7).";
 
 /* Output pins for interface and statua. */
 pin out bit tool_changed "True when the a tool change is complete. Normally this is connected to iocontrol.0.tool-changed.";
-pin out bit is_homed "True when tool changer carousel has been homed. If the tool changer is switched from AUTO mode, it is assumed to be unhomed since manual movement of the carousel may have occurred.";
+pin out bit is_homed "True when tool changer carousel has been homed. If the tool changer is switched from \
+AUTO mode, it is assumed to be unhomed since manual movement of the carousel may have occurred.";
 pin out bit ready "True when qd_auto and claw_open are both TRUE.";
 pin out unsigned error_code "Error Code output. See description for codes.";
 pin out bit error_flag "Goes TRUE when this component is in an error condition.";
-pin out bit fault "Unrecoverable error. This is should be wired to stop the program, which will cancel the tool-change command. Otherwise, a latchup condition can occur if an unsupported tool number is requested.";
+pin out bit fault "Unrecoverable error. This is should be wired to stop the program, which will cancel the tool-change \
+command. Otherwise, a latchup condition can occur if an unsupported tool number is requested.";
 pin out signed current_tool "Carousel pocket number currently in position. Will be zero if not homed.";
 
 // For debugging
