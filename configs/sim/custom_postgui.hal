@@ -67,6 +67,9 @@ net qdtoolchanger-cur-tool <= qdtoolchange.current-tool => pyvcp.cur-toolno-disp
 net qdtoolchanger-homed <= qdtoolchange.is-homed => pyvcp.homed-led
 net qdtoolchanger-ready <= qdtoolchange.ready => pyvcp.qd-ready-led
 
+# Connect air pressure to the tool changer simulator
+net air-press <= pyvcp.qd-air-pressure => qdsim.air-pressure
+
 # Debugging the qdsim component
 #net qdsim-pocket <= qdsim.cur-tool-no => pyvcp.cur-pocket-disp
 #net qdsim-state <= qdsim.cur-state-out => pyvcp.qdsim-state

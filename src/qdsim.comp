@@ -41,6 +41,7 @@ pin in bit tool_out_command "Tool-Out command to the tool changer. Moves the arm
 pin in bit carousel_cw_command "Turret CW command to the tool changer. Moves the carousel clockwise";
 pin in bit carousel_ccw_command "Turret CCW command to the tool changer. Moves the carousel counterclockwise";
 pin in bit carousel_home_command "Turret Home command to the tool changer.";
+pin in bit air_pressure "To simulate the presence of air pressure";
 
 pin out bit qd_reset "Reset signal from the Quickdraw Tool Changer that the current operation is complete";
 pin out bit claw_open_out "Indication that the claw is being held in the opon position.";
@@ -223,7 +224,7 @@ FUNCTION(_) {
 
 	/* Update outputs */
 	qd_reset = compl_out;
-	claw_open_out = claw_open;
+	claw_open_out = claw_open && air_pressure; // Can't have the claw open signal without air
 	cur_tool_no = cur_pocket_no;
 	cur_state_out = cur_state;
 	arm_spindle = arm_at_spindle;
