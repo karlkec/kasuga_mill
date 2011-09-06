@@ -73,8 +73,7 @@ AUTO mode, it is assumed to be unhomed since manual movement of the carousel may
 pin out bit ready "True when qd_auto and claw_open are both TRUE.";
 pin out unsigned error_code "Error Code output. See description for codes.";
 pin out bit error_flag "Goes TRUE when this component is in an error condition.";
-pin out bit fault "Unrecoverable error. This is should be wired to stop the program, which will cancel the tool-change \
-command. Otherwise, a latchup condition can occur if an unsupported tool number is requested.";
+pin out bit no-fault "Absense of a fault condition. Has inverted logic from fault, to allow direct wiring to emc enable pin.";
 pin out signed current_tool "Carousel pocket number currently in position. Will be zero if not homed.";
 
 // For debugging
@@ -580,7 +579,7 @@ FUNCTION(_) {
 	tool_changed = (done && claw_open_deb);
 	is_homed = homed_flag;
 	ready = ((cur_state == STATE_IDLE) && qd_auto_deb && claw_open_deb);
-	fault = fault_out;
+	no_fault = !fault_out;
 }
 
 EXTRA_SETUP() {
