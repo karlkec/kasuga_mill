@@ -187,6 +187,7 @@
 							<hbox>
 								<label><text>"Error"</text></label>
 								<led><off_color>"black"</off_color><size>15</size><halpin>"error-led"</halpin></led>
+								<button><halpin>"error-reset"</halpin><text>" RESET "</text><width>4</width></button>
 							</hbox>
 						</vbox>
 					</hbox>

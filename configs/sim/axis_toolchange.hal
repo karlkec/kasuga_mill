@@ -8,21 +8,16 @@ addf qdtoolchange servo-thread
 addf qdsim servo-thread
 loadrt or2 names=or2.changed
 addf or2.changed servo-thread
-loadrt and2 names=and2.auto,and2.man,and2.enable
+loadrt and2 names=and2.auto,and2.man
 addf and2.auto servo-thread
 addf and2.man servo-thread
-addf and2.enable servo-thread
 
 unlinkp iocontrol.0.tool-change
 unlinkp iocontrol.0.tool-changed
 unlinkp iocontrol.0.tool-prep-number
-unlinkp iocontrol.0.emc-enable-in
-unlinkp iocontrol.0.user-enable-out
 
-# Rewire the estop button to and it with the tool changer no-fault output
-net user-enable <= iocontrol.0.user-enable-out => and2.enable.in0
-net qd-ok <= qdtoolchange.no-fault => and2.enable.in1
-net estop-ored <= and2.enable.out => iocontrol.0.emc-enable-in
+# Tool changer fault
+net qd-fault <= qdtoolchange.fault => halui.estop.activate
 
 # The manual or auto tool changer gets selected here
 net tool-change-in iocontrol.0.tool-change => and2.auto.in0 and2.man.in0
