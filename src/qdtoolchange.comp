@@ -113,8 +113,19 @@ making a tool change in MDI mode.
 To allow manual or automatic tool changes, the iocontrol.tool-change hal signal
 should be directed to either a manual tool change component such as
 hal_manualtoolchange, or to this component's toolchange-req. The tool-changed
-output from this and the equivalent from the manual tool change component
-should be or-ed together and fed to iocontrol.0.tool-changed
+output pin from this and the corresponding pin from the manual tool change
+component should be or-ed together and fed to iocontrol.0.tool-changed
+
+There are a number of conditions which will cause an error to be issued. These are
+divided into fatal and non-fatal errors. Generally fatal errors are ones from which
+graceful recovery is not possible, such as a hardware timeout or requesting an invalid
+tool number. Recoverable errors such as a lack of air pressure can be corrected and 
+the tool change completed without interrupting the program in progress. Fatal errors
+will assert the fault output pin, which should perform an estop or something similar.
+Non-fatal errors will assert the error output pin, which serves to alert the operator.
+When the error condition is resolved, the tool change will continue. Note that 
+as of version 2.4.6, axis is largely unresponsive to mouse control while it is 
+waiting for a tool change to complete.
 
 This component will issue an rtapi error if it sees a toolchange-req input when
 the qd_auto input is not TRUE.
@@ -575,6 +586,8 @@ FUNCTION(_) {
 				cur_state = STATE_IDLE;
 				fault_out = FALSE;
 				error_output = 0;
+				// If the operator does a reset, unhome the carousel.
+				homed_flag = FALSE;
 			}
 			break; // STATE_ERROR
 	}

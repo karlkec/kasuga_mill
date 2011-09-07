@@ -49,7 +49,7 @@ net tool-prep-number => pyvcp.req-toolno-disp
 # QD Auto mode. For simulation only
 net auto-mode <= pyvcp.qd-auto-mode => qdtoolchange.qd-auto
 
-# QD Error
+# QD Error LED
 net qd-error <= qdtoolchange.error-flag => pyvcp.error-led
 
 # Reset button
@@ -68,6 +68,7 @@ net carousel-ccw-command => pyvcp.car-ccw-led
 net carousel-home-command => pyvcp.car-home-led
 net qd-fault => pyvcp.qd-fault-led
 
+# qdtoolchange debugging
 net qdtoolchanger-state <= qdtoolchange.current-state => pyvcp.changer-state-disp
 net qdtoolchanger-cur-tool <= qdtoolchange.current-tool => pyvcp.cur-toolno-disp
 net qdtoolchanger-homed <= qdtoolchange.is-homed => pyvcp.homed-led

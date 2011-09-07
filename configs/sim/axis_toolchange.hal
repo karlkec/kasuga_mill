@@ -16,10 +16,12 @@ unlinkp iocontrol.0.tool-change
 unlinkp iocontrol.0.tool-changed
 unlinkp iocontrol.0.tool-prep-number
 
-# Tool changer fault
+# Tool Changer Fault stops everything. This seems to be the only way to do this
+#  until iocontrol verion 2 is released.
 net qd-fault <= qdtoolchange.fault => halui.estop.activate
 
-# The manual or auto tool changer gets selected here
+# The manual or auto tool changer gets selected here. The other inputs to the and gates
+#  will be connected in the postgui hal file
 net tool-change-in iocontrol.0.tool-change => and2.auto.in0 and2.man.in0
 net tool-change-auto <= and2.auto.out => qdtoolchange.tool-change
 net tool-change-man  <= and2.man.out => hal_manualtoolchange.change
