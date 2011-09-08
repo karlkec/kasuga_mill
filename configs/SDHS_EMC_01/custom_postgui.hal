@@ -57,6 +57,9 @@ net tool-prep-number => pyvcp.req-toolno-disp
 # QD Error LED
 net qd-error <= qdtoolchange.error-flag => pyvcp.error-led
 
+# Reset button
+net qd-error-reset <= pyvcp.error-reset => qdtoolchange.error-reset
+
 # pyvcp hardware monitoring, for debugging
 net tool-change-auto => pyvcp.request-led
 net tool-changed-ored => pyvcp.complete-led

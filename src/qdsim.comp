@@ -53,14 +53,16 @@ pin out bit arm_spindle "Arm is at the Spindle";
 
 param rw float carousel_home_time=10.0 "Time in seconds for the carousel to home.";
 param rw float carousel_move_time=1.2 "Time in seconds for the carousel to move one tool position.";
-param rw float arm_move_time=7.0 "Time in seconds for moving a tool from the carousel to or from the spindle.";
+param rw float arm_move_time=7.0 "Time in seconds for moving the arm between the carousel and spindle.";
 param rw float complete_time_start=0.1 "Time in seconds after completeing an operation for qdreset to go TRUE";
 param rw float complete_pulse_width=0.1 "Time in seconds for qdreset to stay TRUE";
 param rw float claw_open_time=0.2 "Time in seconds for the claw open indication to happen after qdreset goes TRUE";
 
 description """
-qdtoolchange simulates the Dana Summit Quickdraw tool changer.o
+qdtoolchange simulates the Dana Summit Quickdraw tool changer
 
+Hardware inputs control the action, timers simulate the hardware delays, and the qd-reset and claw-open-out
+output pins provide feedback to the qdtoolchange component.
 """;
 
 license "GPL";
@@ -82,11 +84,12 @@ typedef enum {
 } States;
 
 #define STATE_STACK_DEPTH 10
+#define DEFAULT_POCKET_NO 14
 static short cur_state;
 static short prev_state;
 static float timer;
 static float home_time;
-static int cur_pocket_no = 1; // Current tool number 
+static int cur_pocket_no = DEFAULT_POCKET_NO; // Current tool number 
 static bool arm_at_spindle; // Where is the arm
 static bool claw_open = TRUE;
 static bool compl_out;
