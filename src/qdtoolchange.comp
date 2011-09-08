@@ -201,14 +201,6 @@ const char *error_str[] = {
 #define NSPERSEC  1000000000ULL
 #define NSPERMSEC 1000000ULL
 
-// Items to debounce
-typedef enum {
-	DEBOUNCE_QD_COMPLETE,
-	DEBOUNCE_QD_JAW_OPEN,
-	DEBOUNCE_QD_AUTO,
-	MAX_DEBOUNCE_ITEMS
-} debounce_items;
-
 // State names defined
 typedef enum {
 	STATE_IDLE, // 0
@@ -470,8 +462,7 @@ FUNCTION(_) {
 				timer = 0;
 			} else if(completed && was_completed) {
 				/* Completed is high and was high in the previous cycle. Wait for it to go FALSE, 
-				 *  but not past the timeout. We don't use the STATE_WAIT_COMPL_FALSE state since it might
-				 *  require a two-level return stack. */
+				 *  but not past the timeout. */
 				if(timer >= complete_max_time * NSPERMSEC) {
 					error_output = ERROR_QD_COMPLETE_STUCK_HIGH;
 					cur_state = STATE_ERROR;
