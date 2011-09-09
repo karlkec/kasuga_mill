@@ -90,25 +90,29 @@ param rw unsigned complete_max_time=1000 "Maximum time in MILLIseconds to allow 
 param rw unsigned debounce_period=40 "Time in MILLIseconds for all debouncing. Default = 40 msec";
 
 description """
-qdtoolchange manages the Dana Summit Quickdraw tool changer.
 
-The \\fBDana Summit Quickdraw\\fR tool changer hardware has five inputs and two
-outputs.  The five inputs start the various actions of the changer, and the two
-outputs give feedback on its operation. The RESET output is a contact closure
-between pins 11 and 12 of the M-Function connector, which signals that the
-previously-commanded operation is complete. This input is used to determine
-whether the tool changer front panel switch is in the AUTO position.  If the
-switch is changed to MAN or LOC, the logic here assumes the operator may have
-moved the carousel and deems the carousel unhomed. This will require a homing
-operation before any tools can be used.
+qdtoolchange manages the Dana Summit Quickdraw tool changer. This is a
+real-time hal component which receives tool change commands from iocontrol, and
+controls the \\fBDana Summit Quickdraw\\fR hardware to perform the tool change. 
 
-This component attempts to keep track of the state of the tool changer
-hardware.  But since it only has dynamic input on the arm and carousel
-positions, when asked to change a tool for the first time it must remove any
-tool from the spindle and home the carousel. Once feedback is received that
-these operations are complete, the state of the hardware is known. It is
-important that an empty pocket be in position before running a program or
-making a tool change in MDI mode.
+The tool changer hardware has five inputs and two outputs, which are connected
+to five outputs and two inputs of this component. The five hardware inputs
+command the various actions of the changer, while its two outputs give
+operational feedback. The RESET hardware output signals that the
+previously-commanded operation is complete (or that the carousel has moved one
+tool pocket), and the AUTO-MODE output is used to determine whether the
+tool changer front panel is set to the AUTO position. If the switch is placed
+in the MAN or LOC positions, the logic of this component assumes the operator
+may have moved the carousel and flags the carousel as unhomed. This forces a
+homing operation before any tools can be used.
+
+This component attempts to track the state of the tool changer hardware. But
+since it only has dynamic input on the arm and carousel positions, when asked
+to change a tool for the first time it must remove any tool from the spindle
+and home the carousel. Once feedback is received that these operations are
+complete, the state of the hardware is known. It is important that an empty
+pocket be in position before running a program or making a tool change in MDI
+mode.
 
 To allow manual or automatic tool changes, hal signal \\fBiocontrol.tool-change 
 should be directed to either a manual tool change component such as
