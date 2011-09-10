@@ -169,7 +169,7 @@
                         <vbox>
                             <hbox>
                                 <label><text>"Current Pocket No:"</text></label>
-                                <label><text>"     "</text></label>
+                                <label><text>" "</text></label>
                                 <s32><width>3</width><halpin>"cur-toolno-disp"</halpin></s32>
                             </hbox>
                             <hbox>
