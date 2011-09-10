@@ -4,6 +4,7 @@
 *.tbl
 configs/sim/autosave.halscope
 */autosave.halscope
+nc_files/*
 configs/sim/hal_config.txt
 configs/SDHS_EMC_01/hal_config.txt
 configs/SDHS_EMC_01/backups/*

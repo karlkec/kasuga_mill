@@ -121,6 +121,8 @@
 					<hbox>
 						<label><text>"Current Tool No:"</text></label>
 						<s32><width>8</width><halpin>"cur-toolno-disp"</halpin></s32>
+						<label><text>"Requested Tool No:"</text></label>
+						<s32><width>8</width><halpin>"req-toolno-disp"</halpin></s32>
 					</hbox>
 					<hbox>
 						<label><text>"State:"</text></label>
@@ -185,6 +187,7 @@
 							<hbox>
 								<label><text>"Error"</text></label>
 								<led><off_color>"black"</off_color><size>15</size><halpin>"error-led"</halpin></led>
+								<button><halpin>"error-reset"</halpin><text>" RESET "</text><width>4</width></button>
 							</hbox>
 						</vbox>
 					</hbox>

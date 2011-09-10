@@ -6,35 +6,37 @@ loadrt qdsim
 
 addf qdtoolchange servo-thread
 addf qdsim servo-thread
-loadrt or2 count=1
-addf or2.0 servo-thread
-loadrt and2 count=2
-addf and2.0 servo-thread
-addf and2.1 servo-thread
+loadrt or2 names=or2.changed
+addf or2.changed servo-thread
+loadrt and2 names=and2.auto,and2.man
+addf and2.auto servo-thread
+addf and2.man servo-thread
 
 unlinkp iocontrol.0.tool-change
 unlinkp iocontrol.0.tool-changed
 unlinkp iocontrol.0.tool-prep-number
 
+# Tool Changer Fault stops everything. This seems to be the only way to do this
+#  until iocontrol verion 2 is released.
+net qd-fault <= qdtoolchange.fault => halui.estop.activate
 
-# The manual or auto tool changer gets selected here
-net tool-change-in iocontrol.0.tool-change => and2.0.in0 and2.1.in0
-net tool-change-auto <= and2.0.out => qdtoolchange.tool-change
-net tool-change-man  <= and2.1.out => hal_manualtoolchange.change
+# The manual or auto tool changer gets selected here. The other inputs to the and gates
+#  will be connected in the postgui hal file
+net tool-change-in iocontrol.0.tool-change => and2.auto.in0 and2.man.in0
+net tool-change-auto <= and2.auto.out => qdtoolchange.tool-change
+net tool-change-man  <= and2.man.out => hal_manualtoolchange.change
 
 net tool-prep-number <= iocontrol.0.tool-prep-number => hal_manualtoolchange.number 
 net tool-prep-number => qdtoolchange.tool-num
 
 # Or the change complete outputs of the automatic 
 # and manual tool changers together to feed to iocontrol.
-net tc-complete <= qdtoolchange.tool-changed => or2.0.in0
-net tool-changed <= hal_manualtoolchange.changed => or2.0.in1
-net tool-changed-ored or2.0.out iocontrol.0.tool-changed
+net tc-complete <= qdtoolchange.tool-changed => or2.changed.in0
+net tool-changed <= hal_manualtoolchange.changed => or2.changed.in1
+net tool-changed-ored or2.changed.out iocontrol.0.tool-changed
 
 # Machine on bit, to reset errors in the tool changer
 net machine-on <= halui.machine.is-on => qdtoolchange.machine-on
-# Tool changer command to abort the running program
-net qd-fault <= qdtoolchange.fault => halui.program.stop
 
 # Hardware inputs from the simulated tool changer to the qdtoolchange component
 net qd-reset <= qdsim.qd-reset => qdtoolchange.qd-complete

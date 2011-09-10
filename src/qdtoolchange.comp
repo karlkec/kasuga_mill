@@ -39,8 +39,7 @@ component qdtoolchange "EMC HAL component to manage Dana Summit Quickdraw tool c
 pin in bit tool_change "Request a tool change. Normally comes from iocontrol.0.tool-change";
 pin in signed tool_num "The number of the desired new tool. Range is 0 to the turret-capacity \
 parameter (see below). Normally wired to iocontrol.0.tool-prep-number";
-pin in bit machine_on "Tells this component that the machine is on. Used to reset error conditions. \
-Normally wired to halui.machine.is-on";
+pin in bit machine_on "Tells this component that the machine is on. Normally wired to halui.machine.is-on";
 pin in bit qd_complete "Reset signal from the Quickdraw Tool Changer that the current operation is complete.\
 This should be wired to the contact closure which occurs between the white/black and grey wires (pins 11 and 12 of J7) \
 of the Quickdraw M-Function cable.";
@@ -51,6 +50,7 @@ pin in bit claw_open "Indication that the claw is being held in the opon positio
 with the qd_complete bit above, means that the Quickdraw hardware is finished with the tool change. \
 This should be wired to the contact closure which occurs between the white/red and white/orn wires \
 in the M-Function cable from the Quickdraw hardware.";
+pin in bit error_reset "Operator Error Reset button. Used to clear errors.";
 
 /* Pins to control the Quickdraw hardware */
 pin out bit tool_in_command "Tool-In command to the tool changer, to remove the tool from the carousel \
@@ -73,8 +73,8 @@ AUTO mode, it is assumed to be unhomed since manual movement of the carousel may
 pin out bit ready "True when qd_auto and claw_open are both TRUE.";
 pin out unsigned error_code "Error Code output. See description for codes.";
 pin out bit error_flag "Goes TRUE when this component is in an error condition.";
-pin out bit fault "Unrecoverable error. This is should be wired to stop the program, which will cancel the tool-change \
-command. Otherwise, a latchup condition can occur if an unsupported tool number is requested.";
+pin out bit fault "Fatal error. This is should be wired to halui.estop.activate, or something which will abort the tool change request. \
+Otherwise, iocontrol will wait forever for change-complete, which can never happen.";
 pin out signed current_tool "Carousel pocket number currently in position. Will be zero if not homed.";
 
 // For debugging
@@ -90,70 +90,79 @@ param rw unsigned complete_max_time=1000 "Maximum time in MILLIseconds to allow 
 param rw unsigned debounce_period=40 "Time in MILLIseconds for all debouncing. Default = 40 msec";
 
 description """
-qdtoolchange manages the Dana Summit Quickdraw tool changer.o
 
-The \\fBDana Summit Quickdraw\\fR tool changer hardware has five inputs and two
-outputs.  The five inputs start the various actions of the changer, and the two
-outputs give feedback on its operation. The RESET output is a contact closure
-between pins 11 and 12 of the M-Function connector, which signals that the
-previously-commanded operation is complete. The This input is used to determine
-whether the tool changer front panel is switched to the AUTO position.  If the
-switched is changed to MAN or LOC, the logic here assumes the operator may have
-moved the carousel and unhomes the carousel. This will require a homing
-operation before any tools can be used.
+qdtoolchange manages the Dana Summit Quickdraw tool changer. This is a
+real-time hal component which receives tool change commands from iocontrol, and
+controls the \\fBDana Summit Quickdraw\\fR hardware to perform the tool change. 
 
-To allow manual or automatic tool changes, the iocontrol.tool-change hal signal
+The tool changer hardware has five inputs and two outputs, which are connected
+to five outputs and two inputs of this component. The five hardware inputs
+command the various actions of the changer, while its two outputs give
+operational feedback. The RESET hardware output signals that the
+previously-commanded operation is complete (or that the carousel has moved one
+tool pocket), and the AUTO-MODE output is used to determine whether the
+tool changer front panel is set to the AUTO position. If the switch is placed
+in the MAN or LOC positions, the logic of this component assumes the operator
+may have moved the carousel and flags the carousel as unhomed. This forces a
+homing operation before any tools can be used.
+
+This component attempts to track the state of the tool changer hardware. But
+since it only has dynamic input on the arm and carousel positions, when asked
+to change a tool for the first time it must remove any tool from the spindle
+and home the carousel. Once feedback is received that these operations are
+complete, the state of the hardware is known. It is important that an empty
+pocket be in position before running a program or making a tool change in MDI
+mode.
+
+To allow manual or automatic tool changes, hal signal \\fBiocontrol.tool-change 
 should be directed to either a manual tool change component such as
-hal_manualtoolchange, or to this component's toolchange-req.  The tool_changed
-output from this and the equivalent from the manual tool change component should be or-ed together
-and fed to iocontrol.0.tool-changed
+hal_manualtoolchange, or to this component's toolchange-req. The \\fBtool-changed
+output pin from this and the corresponding pin from the manual tool change
+component should be or-ed together and fed to \\fBiocontrol.0.tool-changed
 
-This component will issue an rtapi error if it sees a toolchange-req input when
-the qd_auto input is not TRUE.
+There are a number of conditions which will cause an error. In all cases errors
+will result in an RTAPI error, which should appear on the screen. Errors are
+divided into fatal and non-fatal errors. Generally fatal errors are ones from
+which easy recovery is not possible, such as a hardware timeout or if a tool
+number is requested which is outside the capability of the Quickdraw hardware.
+Non-fatal errors such as a lack of air pressure can be corrected and the tool
+change completed without interrupting the program in progress. Fatal errors
+will assert the fault output pin, which should perform an estop or something
+similar which aborts the program and sets the \\fBtool-change\\fR pin FALSE.
+Both fatal and non-fatal errors assert the \\fBerror_flag\\fR output pin, which
+can serve to alert the operator. After a fatal error, the operator should press
+a reset button or similar, which asserts the \\fBerror_reset\\fR pin to clear
+the error. When a non-fatal error condition is resolved, the tool change will
+continue when the problem is corrected without asserting the
+\\fBerror_reset\\fR pin.
 
-When this component gets a tool change request from iocontrol, it evaluates the
-homed status and the new tool number. If the tool changer is not homed, the
-changer will be homed first. If there is a tool in the spindle it will be
-returned to the carousel at its current location, then the carousel homed if
-needed, then the carousel will be moved to the new tool, and that tool moved to
-the spindle.
+Note that as of emc2 version 2.4.6, axis is largely unresponsive to user input
+while it is waiting for the \\fBiocontrol.0.tool-changed\\fR pin to go TRUE.
+
+When this component gets a tool change request from iocontrol, it starts by
+moving any tool in the spindle to the carousel. It then evaluates the homed
+status and the new tool number. If the tool changer carousel has not been homed
+since this component was started or was issued an \\fBerror_reset\\fR, the
+carousel will be homed first. The carousel will then be moved to the new tool's
+pocket, and that tool moved to the spindle.
 
 Note that since the Quickdraw tool changer cannot prepare a tool before it is
 needed, there must be a hal loopback connection between the prepare tool
-request and the tool_prepared answer, like this: net tool-prepare-loopback
-iocontrol.0.tool-prepare => iocontrol.0.tool-prepared
+request and the tool_prepared answer, like this:
+net tool-prepare-loopback iocontrol.0.tool-prepare => iocontrol.0.tool-prepared
 
 When an error occurs, bits in the error-mask output pin indicate what the error is:
 0 -- No Error
-1 -- Invalid tool-num input
+1 -- Invalid \\fBtool-num\\fR input
 2 -- Spindle-to-Carousel Arm Movement Timed Out
 3 -- Carousel-to-Spindle Arm Movement Timed Out
-4 -- qd_complete Input Stuck Low
-5 -- qd_complete Input Stuck High
+4 -- \\fBqd_complete\\fR Input Stuck Low
+5 -- \\fBqd_complete\\fR Input Stuck High
 6 -- Carousel Movement Timed Out
 7 -- Carousel Home Operation Timed Out
-8 -- Auto Mode not Selected on Quickdraw Front Panel
-9 -- Claw Open Signal not Seen. Possible Air Pressure Problem
-
-The operation of this component is as a state machine. It has 8 states, described here:
-0. STATE_IDLE -- Does nothing except to monitor for a new tool request.
-1. STATE_WAIT_COMPL_FALSE -- Waits for the debounced complete input has gone FALSE. If the time 
-exceeds complete_max_time, issues an error.
-2. STATE_INIT -- Entered when a new tool request is received. Does the following:
-a. Check that the carousel has been homed. If not, home it now.
-b. Check whether the new requested tool and the previous tool are the same. If so sets complete and 
-returns to idle.
-c. Check that the complete input pin is FALSE. If not, wait for it but not longer than complete_max_time
-d. Determines how far and in which direction to move the carousel to the next desired tool.
-e. Sets the CHANGING output to TRUE.
-f. Starts the main timer.
-g. Sets the next state, which depends on the input pins.
-3. STATE_TOOL_OUT -- Issues a TOOL_OUT command to the hardware and waits for completion or timeout.
-4. STATE_TOOL_IN -- Issues a TOOL_IN command to the hardware and waits for completion or timeout.
-5. STATE_CAROUSEL_MOVE -- Issues carousel_cw_command or carousel_ccw_command commands to the hardare.
-Counts complete pulses to determine when the new tool is in the active position.
-6. STATE_CAROUSEL_HOME -- Issues a carousel_home_command command to the hardware and waits for completion or timeout.
-7. STATE_ERROR -- Entered if an error occurs. Changes to STATE_IDLE when machine is turned from off to on.
+8 -- \\fBqd-auto\\fR not TRUE (Auto Mode not Selected on Quickdraw Front Panel)
+9 -- Claw Open Signal not Seen at Start of Tool Change. Possible Air Pressure Problem
+10 -- Claw Opening Timed Out
 """;
 
 license "GPL";
@@ -180,14 +189,14 @@ typedef enum {
 
 const char *error_str[] = {
 	"Quickdraw Tool Changer -- No Error",
-	"Quickdraw Tool Changer -- Tool Number out of Range",
-	"Quickdraw Tool Changer -- Took Too Long to Move to Carousel",
-	"Quickdraw Tool Changer -- Took Too Long to Move to Spindle",
-	"Quickdraw Tool Changer -- Reset Line Did Not Acuate",
-	"Quickdraw Tool Changer -- RESET Relay Stuck Closed",
-	"Quickdraw Tool Changer -- Took Too Long to Move the Carousel",
-	"Quickdraw Tool Changer -- Took Too Long to Home the Carousel",
-	"Quickdraw Tool Changer -- Not Turned On in AUTO Mode",
+	"Quickdraw Tool Changer -- Tool Number out of Range\nPress RESET to Clear",
+	"Quickdraw Tool Changer -- Took Too Long to Move Arm to Carousel\nPress RESET to Clear",
+	"Quickdraw Tool Changer -- Took Too Long to Move Arm to Spindle\nPress RESET to Clear",
+	"Quickdraw Tool Changer -- Reset Output from Tool Changer did not Actuate\nPress RESET to Clear",
+	"Quickdraw Tool Changer -- Reset Output from Tool Changer Stuck On\nPress RESET to Clear",
+	"Quickdraw Tool Changer -- Took Too Long to Move the Carousel\nPress RESET to Clear",
+	"Quickdraw Tool Changer -- Took Too Long to Home the Carousel\nPress RESET to Clear",
+	"Quickdraw Tool Changer -- Please Turn the Tool changer ON in AUTO Mode",
 	"Quickdraw Tool Changer -- Claw not Open. Got Compressed Air?",
 	"Quickdraw Tool Changer -- Claw Open Timed Out. Got Compressed Air?",
 };
@@ -195,14 +204,6 @@ const char *error_str[] = {
 // Time conversions
 #define NSPERSEC  1000000000ULL
 #define NSPERMSEC 1000000ULL
-
-// Items to debounce
-typedef enum {
-	DEBOUNCE_QD_COMPLETE,
-	DEBOUNCE_QD_JAW_OPEN,
-	DEBOUNCE_QD_AUTO,
-	MAX_DEBOUNCE_ITEMS
-} debounce_items;
 
 // State names defined
 typedef enum {
@@ -239,6 +240,8 @@ static bool state_changed;
 static bool claw_open_deb; // Debounced state of the claw-open input pin
 static bool qd_auto_deb; // Debounced state of qd_auto
 static bool was_completed;
+static bool was_error_reset; // Previous state of error_reset
+static bool is_error_reset;
 static bool was_on; // Previous state of pgm_running
 static int distance;
 static bool was_error; // Previous pass was in error state.
@@ -310,9 +313,11 @@ FUNCTION(_) {
 			cur_pocket_no = 0;
 	}
 
-	/* Maintain the past and current machine states. */
+	/* Maintain the past and current states. */
 	was_on = is_on;
 	is_on = machine_on;
+	was_error_reset = is_error_reset;
+	is_error_reset = error_reset;
 			
 	state_changed = (cur_state != prev_state);
 	was_error = (prev_state == STATE_ERROR);
@@ -333,8 +338,7 @@ FUNCTION(_) {
 	switch(cur_state) {
 		case STATE_IDLE: // Check tool_change for a new tool request.
 			if(state_changed) {
-				/* Since cur_state is initialized to STATE_IDLE and at startup there is no state tool_change, 
-				 *  we must have come here from another state. If it wasn't the STATE_ERROR, set done TRUE */
+				/* If we didn't just recover from an error, we must have completed the operation. */
 				if(!was_error)
 					done = TRUE;
 			} else if(tool_change && !done) {
@@ -343,6 +347,7 @@ FUNCTION(_) {
 				if(new_tool_in < 0 || new_tool_in > changer_capacity) {
 					error_output = ERROR_INVALID_NEW_TOOL;
 					cur_state = STATE_ERROR;
+					fault_out = TRUE; // Fatal error
 				} else {
 					/* All OK. Continue */
 					cur_state = STATE_INIT;
@@ -406,6 +411,7 @@ FUNCTION(_) {
 					tool_out_command = FALSE;
 					error_output = ERROR_ARM_TO_CAROUSEL_FAIL;
 					cur_state = STATE_ERROR;
+					fault_out = TRUE; // Fatal error
 				}
 			}
 			break; // STATE_TOOL_OUT
@@ -429,6 +435,7 @@ FUNCTION(_) {
 					tool_in_command = FALSE;
 					error_output = ERROR_ARM_TO_SPINDLE_FAIL;
 					cur_state = STATE_ERROR;
+					fault_out = TRUE; // Fatal error
 				}
 			}
 			break; // STATE_TOOL_IN
@@ -459,11 +466,11 @@ FUNCTION(_) {
 				timer = 0;
 			} else if(completed && was_completed) {
 				/* Completed is high and was high in the previous cycle. Wait for it to go FALSE, 
-				 *  but not past the timeout. We don't use the STATE_WAIT_COMPL_FALSE state since it might
-				 *  require a two-level return stack. */
+				 *  but not past the timeout. */
 				if(timer >= complete_max_time * NSPERMSEC) {
 					error_output = ERROR_QD_COMPLETE_STUCK_HIGH;
 					cur_state = STATE_ERROR;
+					fault_out = TRUE; // Fatal error
 				}
 			} else if(completed && !was_completed) {
 				/* completed has just gone TRUE. We've moved one tool. Reset the timer,
@@ -490,6 +497,7 @@ FUNCTION(_) {
 				carousel_ccw_command = FALSE;
 				error_output = ERROR_CAROUSEL_MOVE_FAIL;
 				cur_state = STATE_ERROR;
+				fault_out = TRUE;
 			}
 			break; // STATE_CAROUSEL_MOVE
 
@@ -513,6 +521,7 @@ FUNCTION(_) {
 				carousel_home_command = FALSE;
 				error_output = ERROR_CAROUSEL_HOME_FAIL;
 				cur_state = STATE_ERROR;
+				fault_out = TRUE; // Fatal error
 			}
 			break; // STATE_CAROUSEL_HOME
 		
@@ -528,6 +537,7 @@ FUNCTION(_) {
 				if(timer >= complete_max_time * NSPERMSEC) {
 					error_output = ERROR_QD_COMPLETE_STUCK_HIGH;
 					cur_state = STATE_ERROR;
+					fault_out = TRUE; // Fatal error
 				}
 			} else {
 				/* OK to move on. */
@@ -550,26 +560,30 @@ FUNCTION(_) {
 
 		case STATE_ERROR:
 			/* If the machine is on, display the error message, then do nothing, but recover when the machine is 
-			 *  turned from off to on. */
+			 *  turned off. */
 			if(state_changed && is_on) {
-				if(error_output == ERROR_INVALID_NEW_TOOL) {
-					/* The error is due to an invalid tool number being passed. This error isn't recoverable,
-					 *  in that the program must be faulted. Set the fault output pin TRUE and wait for
-					 *  the tool_change input to go FALSE. */
-					fault_out = TRUE;
-				}
 				rtapi_print_msg(RTAPI_MSG_ERR,error_str[error_output]);
-			} else if (fault_out && !tool_change) {
-				/* We are faulting due to invalid tool number and the tool change input has 
-				 *  gone false. Set the fault output FALSE. */
-				fault_out = FALSE;
-			} else if(!was_on && is_on) {
-				// We always go back to the idle state, but need to clear the state queue and 
-				//  return to STATE_IDLE.
+			} else if(is_error_reset && !was_error_reset) {
+				/* Clear the error when the operator presses the reset button. Note that
+				 *  without testing for the previous state, it gets stuck with the repeating
+				 *  error message. Dunno why.  */
 				state_index = 0;
 				cur_state = STATE_IDLE;
 				fault_out = FALSE;
-				error_output = 0;
+				error_output = ERROR_NO_ERROR;
+				// If the operator does a reset, unhome the carousel.
+				homed_flag = FALSE;
+			} else if(((error_output == ERROR_CLAW_OPEN_TIMEOUT) || (error_output == ERROR_NOT_CLAW_OPEN))
+						&& claw_open_deb) {
+				/* The claw was not open and it has now opened (or the operator has connected the air). 
+				 * Now we can do what we were about to do. */
+				error_output = ERROR_NO_ERROR;
+				cur_state = dequeue_state();
+			} else if((error_output == ERROR_NOT_AUTO_MODE) && qd_auto_deb) {
+				/* The Quickdraw was not in the auto mode and now it is. 
+				 * Now we can do the tool change. */
+				error_output = ERROR_NO_ERROR;
+				cur_state = dequeue_state();
 			}
 			break; // STATE_ERROR
 	}
