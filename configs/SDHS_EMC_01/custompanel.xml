@@ -136,19 +136,25 @@
 				<bd>3</bd>
 				<vbox>
 					<hbox>
-						<radiobutton><choices>["Auto","Manual"]</choices><halpin>"man-auto-sel"</halpin></radiobutton>
+                        <radiobutton><choices>["Auto","Manual"]</choices><halpin>"man-auto-sel"</halpin></radiobutton>
 					</hbox>
 					<hbox>
 						<label><text>"Current Tool No:"</text></label>
-						<s32><width>8</width><halpin>"cur-toolno-disp"</halpin></s32>
-						<label><text>"Requested Tool No:"</text></label>
-						<s32><width>8</width><halpin>"req-toolno-disp"</halpin></s32>
+						<label><text>"     "</text></label>
+						<s32><width>3</width><halpin>"cur-toolno-disp"</halpin></s32>
 					</hbox>
+					<hbox>
+						<label><text>"Requested Tool No:"</text></label>
+						<s32><width>3</width><halpin>"req-toolno-disp"</halpin></s32>
+					</hbox>
+                    <!-- For debugging
 					<hbox>
 						<label><text>"State:"</text></label>
 						<s32><width>8</width><halpin>"changer-state-disp"</halpin></s32>
 					</hbox>
+                    -->
 					<hbox>
+                        <!-- For debugging
 						<vbox>	
 							<hbox>
 								<label><text>"Change Request"</text></label>
@@ -179,11 +185,13 @@
 								<led><off_color>"black"</off_color><size>15</size><halpin>"qd-fault-led"</halpin></led>
 							</hbox>
 						</vbox>
+                        -->
 						<vbox>
 							<hbox>
-								<label><text>"QD Ready"</text></label>
+								<label><text>"Ready"</text></label>
 								<led><off_color>"black"</off_color><size>15</size><halpin>"qd-ready-led"</halpin></led>
 							</hbox>
+                            <!-- For debugging
 							<hbox>
 								<label><text>"Tool-In"</text></label>
 								<led><off_color>"black"</off_color><size>15</size><halpin>"tool-in-led"</halpin></led>
@@ -204,10 +212,16 @@
 								<label><text>"Carousel-CCW"</text></label>
 								<led><off_color>"black"</off_color><size>15</size><halpin>"car-ccw-led"</halpin></led>
 							</hbox>
+                             -->
 							<hbox>
-								<label><text>"Error"</text></label>
-								<led><off_color>"black"</off_color><size>15</size><halpin>"error-led"</halpin></led>
-								<button><halpin>"error-reset"</halpin><text>" RESET "</text><width>4</width></button>
+                                <vbox>
+                                    <hbox>
+                                        <label><text>"Error  "</text></label>
+                                        <led><off_color>"black"</off_color><size>15</size><halpin>"error-led"</halpin></led>
+                                    </hbox>
+                                </vbox>
+                                <label><text>"  "</text></label>
+                                <button><halpin>"error-reset"</halpin><text>" RESET "</text><width>4</width></button>
 							</hbox>
 						</vbox>
 					</hbox>

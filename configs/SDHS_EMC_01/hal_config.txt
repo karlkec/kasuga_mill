@@ -98,7 +98,7 @@ net probe-in motion.probe-input
 net program-pause pyvcp.pause => halui.program.pause
 net program-resume pyvcp.resume => halui.program.resume
 net program-single-step pyvcp.step => halui.program.step
-net qd-abort qdtoolchange.abort => halui.program.stop
+net qd-fault qdtoolchange.fault => halui.estop.activate
 net qd-reset hm2_5i20.0.gpio.054.in_not => qdtoolchange.qd-complete
 net reset-vfd pyvcp.vfd-reset => hm2_5i20.0.gpio.064.out
 net spindle-at-speed near.0.out
@@ -147,13 +147,13 @@ net zpos-cmd axis.2.motor-pos-cmd => pid.z.command
 net zpos-fb hm2_5i20.0.encoder.02.position => axis.2.motor-pos-fb pid.z.feedback
 net zposlimit hm2_5i20.0.gpio.060.in => axis.2.pos-lim-sw-in
 # parameter values
-setp abs.0.tmax         3540
-setp abs.1.tmax         1380
-setp abs.2.tmax         5260
-setp abs.3.tmax          780
-setp and2.auto.tmax         2510
-setp and2.man.tmax         1300
-setp classicladder.0.refresh.tmax        64230
+setp abs.0.tmax         2340
+setp abs.1.tmax         1770
+setp abs.2.tmax         1870
+setp abs.3.tmax          900
+setp and2.auto.tmax         1570
+setp and2.man.tmax         1250
+setp classicladder.0.refresh.tmax        59210
 setp hm2_5i20.0.encoder.00.counter-mode        FALSE
 setp hm2_5i20.0.encoder.00.filter         TRUE
 setp hm2_5i20.0.encoder.00.index-invert        FALSE
@@ -339,7 +339,7 @@ setp hm2_5i20.0.gpio.071.invert_output         TRUE
 setp hm2_5i20.0.gpio.071.is_opendrain         TRUE
 setp hm2_5i20.0.gpio.071.is_output         TRUE
 setp hm2_5i20.0.io_error        FALSE
-setp hm2_5i20.0.pet_watchdog.tmax        13230
+setp hm2_5i20.0.pet_watchdog.tmax         6530
 setp hm2_5i20.0.pwmgen.00.output-type            1
 setp hm2_5i20.0.pwmgen.00.scale           -5
 setp hm2_5i20.0.pwmgen.01.output-type            1
@@ -350,26 +350,26 @@ setp hm2_5i20.0.pwmgen.03.output-type            1
 setp hm2_5i20.0.pwmgen.03.scale         2500
 setp hm2_5i20.0.pwmgen.pdm_frequency   0x000186A0
 setp hm2_5i20.0.pwmgen.pwm_frequency   0x000186A0
-setp hm2_5i20.0.read.tmax        75290
+setp hm2_5i20.0.read.tmax        71420
 setp hm2_5i20.0.read_gpio.tmax            0
 setp hm2_5i20.0.watchdog.timeout_ns   0x00989680
-setp hm2_5i20.0.write.tmax        42880
+setp hm2_5i20.0.write.tmax        36980
 setp hm2_5i20.0.write_gpio.tmax            0
-setp motion-command-handler.tmax         5630
-setp motion-controller.tmax        50930
+setp motion-command-handler.tmax         5070
+setp motion-controller.tmax        53680
 setp motion.servo.overruns   0x00000000
-setp mult2.0.tmax         3550
+setp mult2.0.tmax         2750
 setp near.0.difference            0
 setp near.0.scale          0.9
-setp near.0.tmax         2130
-setp or2.compl.tmax         1820
-setp pid.0.do-pid-calcs.tmax         9030
-setp pid.1.do-pid-calcs.tmax         8660
-setp pid.2.do-pid-calcs.tmax         4590
-setp pid.3.do-pid-calcs.tmax         3390
-setp pid.4.do-pid-calcs.tmax         6460
-setp pid.5.do-pid-calcs.tmax         2750
-setp pid.6.do-pid-calcs.tmax         3980
+setp near.0.tmax         4120
+setp or2.compl.tmax         2930
+setp pid.0.do-pid-calcs.tmax         8430
+setp pid.1.do-pid-calcs.tmax         5100
+setp pid.2.do-pid-calcs.tmax         4470
+setp pid.3.do-pid-calcs.tmax         4320
+setp pid.4.do-pid-calcs.tmax         3830
+setp pid.5.do-pid-calcs.tmax         2710
+setp pid.6.do-pid-calcs.tmax         3740
 setp qdtoolchange.arm-move-timeout   0x0000000F
 setp qdtoolchange.carousel-home-timeout   0x0000002D
 setp qdtoolchange.carousel-move-timeout   0x00000003
@@ -377,12 +377,12 @@ setp qdtoolchange.changer-capacity   0x00000018
 setp qdtoolchange.claw-open-timeout   0x000003E8
 setp qdtoolchange.complete-max-time   0x000003E8
 setp qdtoolchange.debounce-period   0x00000028
-setp qdtoolchange.tmax         6680
-setp scale.0.tmax         1370
-setp scale.1.tmax         1190
-setp scale.2.tmax         1760
-setp scale.3.tmax         4770
-setp scale.spindle.tmax         5030
+setp qdtoolchange.tmax         5350
+setp scale.0.tmax         1300
+setp scale.1.tmax         1470
+setp scale.2.tmax         1080
+setp scale.3.tmax         1200
+setp scale.spindle.tmax         3080
 # realtime thread/function links
 addf hm2_5i20.0.read servo-thread
 addf motion-command-handler servo-thread
