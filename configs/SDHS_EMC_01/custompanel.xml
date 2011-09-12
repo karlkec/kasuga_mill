@@ -105,9 +105,13 @@
 						<label><width>1</width></label>
 						<relief>RIDGE</relief>         
 						<bd>2</bd>
-						<label><width>10</width><text>"Drive Fault:"</text><font>("Helvetica",11)</font></label>
-						<label><width>1</width></label>
-						<led><halpin>"vfd-fault"</halpin><size>20</size><on_color>"red"</on_color><off_color>"grey"</off_color></led>	
+						<vbox>
+							<hbox>
+								<label><width>10</width><text>"Drive Fault:"</text><font>("Helvetica",11)</font></label>
+								<label><width>1</width></label>
+								<led><halpin>"vfd-fault"</halpin><size>20</size><on_color>"red"</on_color><off_color>"grey"</off_color></led>	
+							</hbox>
+						</vbox>
 						<label><width>3</width></label>
 						<button><halpin>"vfd-reset"</halpin><text>" RESET "</text><width>6</width><font>("Helvetica",10)</font></button>
 						<label><width>5</width></label>
@@ -121,8 +125,8 @@
 					<hbox>
                         <label><width>3</width></label>
                         <radiobutton><choices>["Auto","Manual"]</choices><halpin>"man-auto-sel"</halpin></radiobutton>
+						<!-- For debugging
 						<vbox>
-                            <!-- For debugging
 							<hbox>
 								<label><text>"Tool-In"</text></label>
 								<led><off_color>"black"</off_color><size>15</size><halpin>"tool-in-led"</halpin></led>
@@ -143,8 +147,8 @@
 								<label><text>"Carousel-CCW"</text></label>
 								<led><off_color>"black"</off_color><size>15</size><halpin>"car-ccw-led"</halpin></led>
 							</hbox>
-                             -->
 						</vbox>
+						 -->
 					</hbox>
                     <hbox>
 						<relief>RIDGE</relief>         
@@ -183,9 +187,7 @@
 						<label><text>"State:"</text></label>
 						<s32><width>8</width><halpin>"changer-state-disp"</halpin></s32>
 					</hbox>
-                    -->
 					<hbox>
-                        <!-- For debugging
 						<vbox>	
 							<hbox>
 								<label><text>"Change Request"</text></label>
@@ -216,8 +218,8 @@
 								<led><off_color>"black"</off_color><size>15</size><halpin>"qd-fault-led"</halpin></led>
 							</hbox>
 						</vbox>
-                        -->
 					</hbox>
+					-->
 				</vbox>
 			</labelframe>
 			<labelframe text="Program Control"> 
