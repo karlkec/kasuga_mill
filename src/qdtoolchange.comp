@@ -207,7 +207,7 @@ const char *error_str[] = {
 
 // State names defined
 typedef enum {
-	STATE_IDLE, // 0
+	STATE_IDLE = 0, // 0
 	STATE_INIT, // 1
 	STATE_TOOL_OUT, // 2
 	STATE_TOOL_IN, // 3
@@ -215,7 +215,9 @@ typedef enum {
 	STATE_CAROUSEL_HOME, // 5
 	STATE_WAIT_CLAW_OPEN, // 6
 	STATE_WAIT_COMPL_FALSE, // 7
-	STATE_ERROR // 8
+	STATE_CLAW_ERROR, // 8
+	STATE_AUTO_ERROR, // 9
+	STATE_FAULT // 10
 } States;
 
 #define STATE_STACK_DEPTH 10
@@ -320,7 +322,7 @@ FUNCTION(_) {
 	is_error_reset = error_reset;
 			
 	state_changed = (cur_state != prev_state);
-	was_error = (prev_state == STATE_ERROR);
+	was_error = (prev_state == STATE_FAULT) || (prev_state == STATE_CLAW_ERROR) || (prev_state == STATE_AUTO_ERROR);
 	if(state_changed) {
 		prev_state = cur_state;
 	} 
@@ -346,7 +348,7 @@ FUNCTION(_) {
 				new_tool_in = tool_num;
 				if(new_tool_in < 0 || new_tool_in > changer_capacity) {
 					error_output = ERROR_INVALID_NEW_TOOL;
-					cur_state = STATE_ERROR;
+					cur_state = STATE_FAULT;
 					fault_out = TRUE; // Fatal error
 				} else {
 					/* All OK. Continue */
@@ -363,7 +365,7 @@ FUNCTION(_) {
 			 * If not homed, we need to do that first. */
 			if(!qd_auto_deb) {
 				 error_output = ERROR_NOT_AUTO_MODE;
-				 cur_state = STATE_ERROR;
+				 cur_state = STATE_AUTO_ERROR;
 			} else if(completed) {
 				/* completed is TRUE. We must wait for it to go FALSE before initiating a movement. */
 				enqueue_state(STATE_INIT);
@@ -372,7 +374,7 @@ FUNCTION(_) {
 				/* The claw-open signal is not present. We can't proceed without that. Probably no
 				 *  air line connected. */
 				error_output = ERROR_NOT_CLAW_OPEN;
-				cur_state = STATE_ERROR;
+				cur_state = STATE_CLAW_ERROR;
 			} else {
 				if(new_tool_in) {
 					/* Only put a new tool in if asked to. Zero for new_tool_in means just 
@@ -410,7 +412,7 @@ FUNCTION(_) {
 				} else if(timer >= (unsigned long long)arm_move_timeout * NSPERSEC) {
 					tool_out_command = FALSE;
 					error_output = ERROR_ARM_TO_CAROUSEL_FAIL;
-					cur_state = STATE_ERROR;
+					cur_state = STATE_FAULT;
 					fault_out = TRUE; // Fatal error
 				}
 			}
@@ -434,7 +436,7 @@ FUNCTION(_) {
 				} else if(timer >= (unsigned long long)arm_move_timeout * NSPERSEC) {
 					tool_in_command = FALSE;
 					error_output = ERROR_ARM_TO_SPINDLE_FAIL;
-					cur_state = STATE_ERROR;
+					cur_state = STATE_FAULT;
 					fault_out = TRUE; // Fatal error
 				}
 			}
@@ -469,7 +471,7 @@ FUNCTION(_) {
 				 *  but not past the timeout. */
 				if(timer >= complete_max_time * NSPERMSEC) {
 					error_output = ERROR_QD_COMPLETE_STUCK_HIGH;
-					cur_state = STATE_ERROR;
+					cur_state = STATE_FAULT;
 					fault_out = TRUE; // Fatal error
 				}
 			} else if(completed && !was_completed) {
@@ -496,7 +498,7 @@ FUNCTION(_) {
 				carousel_cw_command = FALSE;
 				carousel_ccw_command = FALSE;
 				error_output = ERROR_CAROUSEL_MOVE_FAIL;
-				cur_state = STATE_ERROR;
+				cur_state = STATE_FAULT;
 				fault_out = TRUE;
 			}
 			break; // STATE_CAROUSEL_MOVE
@@ -520,7 +522,7 @@ FUNCTION(_) {
 			} else if(timer >= (unsigned long long)carousel_home_timeout * NSPERSEC) {
 				carousel_home_command = FALSE;
 				error_output = ERROR_CAROUSEL_HOME_FAIL;
-				cur_state = STATE_ERROR;
+				cur_state = STATE_FAULT;
 				fault_out = TRUE; // Fatal error
 			}
 			break; // STATE_CAROUSEL_HOME
@@ -536,7 +538,7 @@ FUNCTION(_) {
 				 *  FALSE before going to the next_state. */
 				if(timer >= complete_max_time * NSPERMSEC) {
 					error_output = ERROR_QD_COMPLETE_STUCK_HIGH;
-					cur_state = STATE_ERROR;
+					cur_state = STATE_FAULT;
 					fault_out = TRUE; // Fatal error
 				}
 			} else {
@@ -554,38 +556,49 @@ FUNCTION(_) {
 			} else if(timer > claw_open_timeout * NSPERMSEC) {
 				/* Claw took too long to open */
 				error_output = ERROR_CLAW_OPEN_TIMEOUT;
-				cur_state = STATE_ERROR;
+				cur_state = STATE_CLAW_ERROR;
 			}
 			break;
 
-		case STATE_ERROR:
+		case STATE_CLAW_ERROR:
+			if(state_changed) {
+				rtapi_print_msg(RTAPI_MSG_ERR,error_str[error_output]);
+			} else if(is_error_reset && !was_error_reset && claw_open_deb) {
+				/* The claw has been opened (or the operator connected the air
+				 *  hose, and the reset button was pressed. Move on. */
+				error_output = ERROR_NO_ERROR;
+				cur_state = dequeue_state();
+			}
+			break; // STATE_CLAW_ERROR
+
+		case STATE_AUTO_ERROR:
+			if(state_changed) {
+				rtapi_print_msg(RTAPI_MSG_ERR,error_str[error_output]);
+			} else if(is_error_reset && !was_error_reset && qd_auto_deb) {
+				/* The operator has switched on the tool changer to AUTO mode, and 
+				 *  pressed the reset button. Time to move on. */
+				error_output = ERROR_NO_ERROR;
+				cur_state = dequeue_state();
+			}
+			break; // STATE_AUTO_ERROR
+
+		case STATE_FAULT:
 			/* If the machine is on, display the error message, then do nothing, but recover when the machine is 
 			 *  turned off. */
 			if(state_changed && is_on) {
 				rtapi_print_msg(RTAPI_MSG_ERR,error_str[error_output]);
 			} else if(is_error_reset && !was_error_reset) {
-				/* Clear the error when the operator presses the reset button. Note that
+				/* Clear the fault when the operator presses the reset button. Note that
 				 *  without testing for the previous state, it gets stuck with the repeating
 				 *  error message. Dunno why.  */
 				state_index = 0;
 				cur_state = STATE_IDLE;
 				fault_out = FALSE;
 				error_output = ERROR_NO_ERROR;
-				// If the operator does a reset, unhome the carousel.
+				// When the operator resets a fault, unhome the carousel.
 				homed_flag = FALSE;
-			} else if(((error_output == ERROR_CLAW_OPEN_TIMEOUT) || (error_output == ERROR_NOT_CLAW_OPEN))
-						&& claw_open_deb) {
-				/* The claw was not open and it has now opened (or the operator has connected the air). 
-				 * Now we can do what we were about to do. */
-				error_output = ERROR_NO_ERROR;
-				cur_state = dequeue_state();
-			} else if((error_output == ERROR_NOT_AUTO_MODE) && qd_auto_deb) {
-				/* The Quickdraw was not in the auto mode and now it is. 
-				 * Now we can do the tool change. */
-				error_output = ERROR_NO_ERROR;
-				cur_state = dequeue_state();
 			}
-			break; // STATE_ERROR
+			break; // STATE_FAULT
 	}
 	current_state = cur_state;
 	current_tool = cur_pocket_no;

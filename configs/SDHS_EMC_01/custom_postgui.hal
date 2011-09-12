@@ -42,9 +42,6 @@ net MDI-zero_Y          pyvcp.MDI-zeroy         =>  halui.mdi-command-03
 net MDI-zero_Z          pyvcp.MDI-zeroz         =>  halui.mdi-command-04
 net MDI-clear-offset    pyvcp.MDI-clear-offset  =>  halui.mdi-command-05
 
-# Dump the setup to a file
-save all hal_config.txt
-
 ############### Quickdraw Tool Changer GUI Interface ################
 
 # Auto-Manual radio button
@@ -79,3 +76,7 @@ net qdtoolchanger-ready <= qdtoolchange.ready => pyvcp.qd-ready-led
 
 
 # **** Setup of pyvcp buttons and MDI commands using HAL_UI and pyvcp - END ****
+
+# Dump the setup to a file
+save all hal_config.txt
+
