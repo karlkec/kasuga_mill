@@ -262,10 +262,16 @@ inline int dequeue_state(void) {
 	/* Pops the next state from the state stack. the bottom state is 
 	 *  always STATE_IDLE.
 	 */
-	if(state_index > 0)
-		return state_stack[state_index--];
-	else
+	short new_state;
+	if(state_index > 0) {
+		/* Reset the state index to the base state if going back to IDLE. */
+		new_state = state_stack[state_index--];
+		if(new_state == STATE_IDLE)
+			state_index = 0;
+		return new_state;
+	} else {
 		return STATE_IDLE;
+	}
 }
 
 FUNCTION(_) {
@@ -376,18 +382,27 @@ FUNCTION(_) {
 				error_output = ERROR_NOT_CLAW_OPEN;
 				cur_state = STATE_CLAW_ERROR;
 			} else {
-				if(new_tool_in) {
-					/* Only put a new tool in if asked to. Zero for new_tool_in means just 
-					 *  take the old tool out. */
+				/* No error condition. Determine what operations to perform. Enqueuing states
+				 *  loads a LIFO, so we load them in reverse order. */
+				if(!new_tool_in) {
+					/* Just remove the old tool regarless of whether the carousel is homed or not. */
+					cur_state = STATE_TOOL_OUT;
+				} else if(homed_flag) {
+					if(new_tool_in == cur_pocket_no) {
+						/* The carousel is homed and at the right position. We don't need to remove
+						 *  the current tool (if there is one in the spindle). Just put one in if
+						 *  the arm is at the carousel. */
+						cur_state = STATE_TOOL_IN;
+					} else {
+						/* It's homed and we need a differnet tool. Move the carousel to the new tool (if needed)
+						 *  and put it in. */
+						enqueue_state(STATE_TOOL_IN);
+						enqueue_state(STATE_CAROUSEL_MOVE);
+						cur_state = STATE_TOOL_OUT;
+					}
+				} else { // Not homed and we need a new tool.
 					enqueue_state(STATE_TOOL_IN);
 					enqueue_state(STATE_CAROUSEL_MOVE);
-				}
-				if(homed_flag) {
-					/* We assume if we're homed the carousel is already in position. So 
-					 *  just take the tool out. */
-					cur_state = STATE_TOOL_OUT;
-				} else {
-					/* Not homed. Take the tool out and home it. */
 					enqueue_state(STATE_CAROUSEL_HOME);
 					cur_state = STATE_TOOL_OUT;
 				}
@@ -404,17 +419,22 @@ FUNCTION(_) {
 					timer = 0;
 					tool_out_command = TRUE;
 				}
-			} else {
-				if(completed) {
-					/* Done! Wait for the claw to open before moving on. */
-					tool_out_command = FALSE;
-					cur_state = STATE_WAIT_CLAW_OPEN;
-				} else if(timer >= (unsigned long long)arm_move_timeout * NSPERSEC) {
-					tool_out_command = FALSE;
-					error_output = ERROR_ARM_TO_CAROUSEL_FAIL;
-					cur_state = STATE_FAULT;
-					fault_out = TRUE; // Fatal error
-				}
+			} else if(!qd_auto_deb) {
+				/* Not in AUTO mode any more. Stop the operation and wait for it to
+				 *  get turned on again. */
+				enqueue_state(cur_state);
+				tool_out_command = FALSE;
+				error_output = ERROR_NOT_AUTO_MODE;
+				cur_state = STATE_AUTO_ERROR;
+			} else if(completed) {
+				/* Done! Wait for the claw to open before moving on. */
+				tool_out_command = FALSE;
+				cur_state = STATE_WAIT_CLAW_OPEN;
+			} else if(timer >= (unsigned long long)arm_move_timeout * NSPERSEC) {
+				tool_out_command = FALSE;
+				error_output = ERROR_ARM_TO_CAROUSEL_FAIL;
+				cur_state = STATE_FAULT;
+				fault_out = TRUE; // Fatal error
 			}
 			break; // STATE_TOOL_OUT
 
@@ -428,17 +448,21 @@ FUNCTION(_) {
 					timer = 0;
 					tool_in_command = TRUE;
 				}
-			} else {
-				if(completed) {
-					/* Done with the tool change. Wait for the claw to open before moving on. */
-					tool_in_command = FALSE;
-					cur_state = STATE_WAIT_CLAW_OPEN;
-				} else if(timer >= (unsigned long long)arm_move_timeout * NSPERSEC) {
-					tool_in_command = FALSE;
-					error_output = ERROR_ARM_TO_SPINDLE_FAIL;
-					cur_state = STATE_FAULT;
-					fault_out = TRUE; // Fatal error
-				}
+			} else if(!qd_auto_deb) {
+				/* Not in AUTO mode any more. Abort the operation. */
+				enqueue_state(STATE_IDLE);
+				tool_in_command = FALSE;
+				error_output = ERROR_NOT_AUTO_MODE;
+				cur_state = STATE_AUTO_ERROR;
+			} else if(completed) {
+				/* Done with the tool change. Wait for the claw to open before moving on. */
+				tool_in_command = FALSE;
+				cur_state = STATE_WAIT_CLAW_OPEN;
+			} else if(timer >= (unsigned long long)arm_move_timeout * NSPERSEC) {
+				tool_in_command = FALSE;
+				error_output = ERROR_ARM_TO_SPINDLE_FAIL;
+				cur_state = STATE_FAULT;
+				fault_out = TRUE; // Fatal error
 			}
 			break; // STATE_TOOL_IN
 	
@@ -463,6 +487,13 @@ FUNCTION(_) {
 							carousel_ccw_command = TRUE;
 					}
 				}
+			} else if(!qd_auto_deb) {
+				/* Not in AUTO mode any more. Abort the operation. */
+				enqueue_state(STATE_IDLE);
+				carousel_cw_command = FALSE;
+				carousel_ccw_command = FALSE;
+				error_output = ERROR_NOT_AUTO_MODE;
+				cur_state = STATE_AUTO_ERROR;
 			} else if(!completed && was_completed) {
 				/* The debounced completed input has just gone FALSE. Reset the timer */
 				timer = 0;
@@ -513,6 +544,12 @@ FUNCTION(_) {
 					timer = 0;
 					carousel_home_command = TRUE;
 				}
+			} else if(!qd_auto_deb) {
+				/* Not in AUTO mode any more. Abort the operation. */
+				enqueue_state(STATE_IDLE);
+				carousel_home_command = FALSE;
+				error_output = ERROR_NOT_AUTO_MODE;
+				cur_state = STATE_AUTO_ERROR;
 			} else if(completed) {
 				/* Done with homing the carousel. */
 				carousel_home_command = FALSE;
@@ -548,6 +585,9 @@ FUNCTION(_) {
 			break; // STATE_WAIT_COMPL_FALSE
 
 		case STATE_WAIT_CLAW_OPEN:
+			/* Don't test for AUTO mode here. The claw open signal should come
+			 * back regarless of whether the tool changer is in AUTO mode or
+			 * not (claw open is the default state of the changer). */
 			if(state_changed) {
 				timer = 0;
 			} else if(claw_open_deb) {
@@ -566,8 +606,19 @@ FUNCTION(_) {
 			} else if(is_error_reset && !was_error_reset && claw_open_deb) {
 				/* The claw has been opened (or the operator connected the air
 				 *  hose, and the reset button was pressed. Move on. */
-				error_output = ERROR_NO_ERROR;
-				cur_state = dequeue_state();
+				if(!qd_auto_deb) {
+					/* Claw is open but now we're not in AUTO mode. Go to that
+					 *  Error state. */
+					error_output = ERROR_NOT_AUTO_MODE;
+					cur_state = STATE_AUTO_ERROR;
+				} else {
+					error_output = ERROR_NO_ERROR;
+					cur_state = dequeue_state();
+				}
+			} else if(is_error_reset && !was_error_reset) {
+				/* The operator pressed the reset button but we still don't have
+				 * a claw-open signal. Issue the error message again. */
+				rtapi_print_msg(RTAPI_MSG_ERR,error_str[error_output]);
 			}
 			break; // STATE_CLAW_ERROR
 
@@ -579,6 +630,10 @@ FUNCTION(_) {
 				 *  pressed the reset button. Time to move on. */
 				error_output = ERROR_NO_ERROR;
 				cur_state = dequeue_state();
+			} else if(is_error_reset && !was_error_reset) {
+				/* The operator has pressed the reset button but it's still not
+				 *  in AUTO mode. Issue the error message again. */
+				rtapi_print_msg(RTAPI_MSG_ERR,error_str[error_output]);
 			}
 			break; // STATE_AUTO_ERROR
 
@@ -606,7 +661,7 @@ FUNCTION(_) {
 	error_flag = (error_code != 0);
 	tool_changed = (done && claw_open_deb);
 	is_homed = homed_flag;
-	ready = ((cur_state == STATE_IDLE) && qd_auto_deb && claw_open_deb);
+	ready = (cur_state == STATE_IDLE) && is_on && qd_auto_deb && claw_open_deb;
 	fault = fault_out;
 }
 

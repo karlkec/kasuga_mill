@@ -42,6 +42,9 @@ net machine-on <= halui.machine.is-on => qdtoolchange.machine-on
 net qd-reset <= qdsim.qd-reset => qdtoolchange.qd-complete
 net claw-open <= qdsim.claw-open-out => qdtoolchange.claw-open
 
+# Auto mode from the tool changer simulator
+net auto-mode <= qdsim.auto-out => qdtoolchange.qd-auto
+
 # Output commands from qdtoolchange component to tool changer hardware
 net tool-out-command <= qdtoolchange.tool-out-command => qdsim.tool-out-command
 net tool-in-command <= qdtoolchange.tool-in-command => qdsim.tool-in-command

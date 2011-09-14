@@ -121,6 +121,21 @@
 					</hbox>
 				</vbox>
 			</labelframe>
+			<labelframe text="Program Control"> 
+				<font>("Helvetica",11)</font>
+				<bd>3</bd>
+				<hbox>
+					<vbox>
+						<button><halpin>"pause"</halpin><text>"Pause"</text><bg>"red"</bg></button>
+					</vbox>
+					<button><halpin>"resume"</halpin><text>"Resume"</text><bg>"green"</bg></button>
+					<button><halpin>"step"</halpin><text>"Single block"</text><bg>"yellow"</bg></button>
+					<vbox>
+					</vbox>
+				</hbox>
+			</labelframe>
+		</vbox>
+		<vbox>
 			<labelframe text="Tool Changer"> 
 				<font>("Helvetica",11)</font>
 				<bd>3</bd>
@@ -143,7 +158,6 @@
 					<hbox>
 						<label><width>3</width></label>
 						<radiobutton><choices>["Auto","Manual"]</choices><halpin>"man-auto-sel"</halpin></radiobutton>
-						<!-- For debugging
 						<vbox>
 							<hbox>
 								<label><text>"Tool-In"</text></label>
@@ -166,7 +180,6 @@
 								<led><off_color>"black"</off_color><size>15</size><halpin>"car-ccw-led"</halpin></led>
 							</hbox>
 						</vbox>
-						-->
 					</hbox>
                     <hbox>
 						<relief>RIDGE</relief>         
@@ -180,7 +193,8 @@
 								<vbox>
 									<hbox>
 										<label><text>"Error   "</text></label>
-										<led><off_color>"black"</off_color><size>15</size><halpin>"error-led"</halpin></led>
+										<led><off_color>"black"</off_color><on_color>"red"</on_color>
+											<size>15</size><halpin>"error-led"</halpin></led>
 									</hbox>
 								</vbox>
 								<label><width>1</width></label>
@@ -200,7 +214,6 @@
 							</hbox>
 						</vbox>
 					</hbox>
-					<!-- For debugging
 					<hbox>
 						<label><text>"State:"</text></label>
 						<s32><width>8</width><halpin>"changer-state-disp"</halpin></s32>
@@ -237,21 +250,7 @@
 							</hbox>
 						</vbox>
 					</hbox>
-					-->
 				</vbox>
-			</labelframe>
-			<labelframe text="Program Control"> 
-				<font>("Helvetica",11)</font>
-				<bd>3</bd>
-				<hbox>
-					<vbox>
-						<button><halpin>"pause"</halpin><text>"Pause"</text><bg>"red"</bg></button>
-					</vbox>
-					<button><halpin>"resume"</halpin><text>"Resume"</text><bg>"green"</bg></button>
-					<button><halpin>"step"</halpin><text>"Single block"</text><bg>"yellow"</bg></button>
-					<vbox>
-					</vbox>
-				</hbox>
 			</labelframe>
 		</vbox>
 	</hbox>
