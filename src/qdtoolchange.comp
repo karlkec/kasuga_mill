@@ -92,55 +92,61 @@ param rw unsigned debounce_period=40 "Time in MILLIseconds for all debouncing. D
 description """
 
 qdtoolchange manages the Dana Summit Quickdraw tool changer. This is a
-real-time hal component which receives tool change commands from iocontrol, and
-controls the \\fBDana Summit Quickdraw\\fR hardware to perform the tool change. 
+real-time hal component which receives tool change commands and controls the
+\\fBDana Summit Quickdraw\\fR hardware to perform the tool change. 
 
-The tool changer hardware has five inputs and two outputs, which are connected
-to five outputs and two inputs of this component. The five hardware inputs
-command the various actions of the changer, while its two outputs give
-operational feedback. The RESET hardware output signals that the
-previously-commanded operation is complete (or that the carousel has moved one
-tool pocket), and the AUTO-MODE output is used to determine whether the
-tool changer front panel is set to the AUTO position. If the switch is placed
-in the MAN or LOC positions, the logic of this component assumes the operator
-may have moved the carousel and flags the carousel as unhomed. This forces a
-homing operation before any tools can be used.
+The tool changer hardware has five inputs to command various actions of the
+tool changer, and two outputs which give operational feedback. The RESET
+hardware output signals that the previously-commanded operation is complete (or
+that the carousel has moved one tool pocket), and the AUTO-MODE output
+is used to determine whether the tool changer front panel switch is set to the
+AUTO position. If the switch is placed in the MAN or LOC positions, this
+component assumes the operator may have moved the carousel and deems the
+carousel unhomed. This forces a homing operation before any tools can be used.
 
 This component attempts to track the state of the tool changer hardware. But
-since it only has dynamic input on the arm and carousel positions, when asked
+since it only has dynamic feedback for arm and carousel movements, when asked
 to change a tool for the first time it must remove any tool from the spindle
 and home the carousel. Once feedback is received that these operations are
 complete, the state of the hardware is known. It is important that an empty
-pocket be in position before running a program or making a tool change in MDI
-mode.
+pocket be in position before running a program which uses tool changes, or
+making a tool change in MDI mode.
 
-To allow manual or automatic tool changes, hal signal \\fBiocontrol.tool-change 
-should be directed to either a manual tool change component such as
-hal_manualtoolchange, or to this component's toolchange-req. The \\fBtool-changed
-output pin from this and the corresponding pin from the manual tool change
-component should be or-ed together and fed to \\fBiocontrol.0.tool-changed
+To allow manual or automatic tool changes, hal signal
+\\fBiocontrol.tool-change\\fR should be directed to either a manual tool change
+component such as hal_manualtoolchange, or to this component's toolchange-req.
+The \\fBtool-changed\\fR output pin from this and the corresponding pin from
+the manual tool change component should be or-ed together and fed to
+\\fBiocontrol.0.tool-change.\\fR The \\fBiocontrol.tool-prep-number\\fR should be
+sent to both the manual tool change and to this component.
 
-There are a number of conditions which will cause an error. In all cases errors
-will result in an RTAPI error, which should appear on the screen. Errors are
-divided into fatal and non-fatal errors. Generally fatal errors are ones from
-which easy recovery is not possible, such as a hardware timeout or if a tool
-number is requested which is outside the capability of the Quickdraw hardware.
-Non-fatal errors such as a lack of air pressure can be corrected and the tool
-change completed without interrupting the program in progress. Fatal errors
-will assert the fault output pin, which should perform an estop or something
-similar which aborts the program and sets the \\fBtool-change\\fR pin FALSE.
-Both fatal and non-fatal errors assert the \\fBerror_flag\\fR output pin, which
-can serve to alert the operator. After a fatal error, the operator should press
-a reset button or similar, which asserts the \\fBerror_reset\\fR pin to clear
-the error. When a non-fatal error condition is resolved, the tool change will
-continue when the problem is corrected without asserting the
-\\fBerror_reset\\fR pin.
+There are a number of conditions which result in an error. In all cases errors
+will cause an RTAPI error to be issued, which should appear on the operator
+screen. Errors are divided into fatal and non-fatal errors. Generally fatal
+errors are ones from which easy recovery is not possible, such as a hardware
+timeout or if a tool number is requested which is outside the capability of the
+tool changer hardware. Non-fatal errors such as a lack of air pressure can be
+corrected and the tool change completed by asserting the \\fBerror-reset\\fR input pin
+without interrupting the program in progress. Fatal errors will assert the
+fault output pin, which should perform an estop or something similar to
+aborts the running program and set the \\fBtool-change\\fR pin FALSE.  Both fatal and
+non-fatal errors assert the \\fBerror_flag\\fR output pin, which can serve to
+alert the operator. After a any error, the operator should press a reset
+button or similar, which asserts the \\fBerror_reset\\fR pin to clear the
+error. This input pin is edge sensitive, so wiring it TRUE won't do.
 
 Note that as of emc2 version 2.4.6, axis is largely unresponsive to user input
 while it is waiting for the \\fBiocontrol.0.tool-changed\\fR pin to go TRUE.
 
-When this component gets a tool change request from iocontrol, it starts by
-moving any tool in the spindle to the carousel. It then evaluates the homed
+When this component gets a tool change request from iocontrol, it evaluates the
+homed status, the \\fBtool-num\\fR, and the number of the tool in the spindle.
+If the requested tool number is zero, any tool in the spindle is placed in the
+carousel.
+
+If the carousel is not homed,
+the tool in the spindle is moved to the carousel and the carousel homed. It is assumed that there is an empty pocket in the carousel positioned to accept the tool from the spindle. After homing, 
+if a different tool is needed, it
+moves the carousel to the new tool and puts it into the spindle. It then evaluates the homed
 status and the new tool number. If the tool changer carousel has not been homed
 since this component was started or was issued an \\fBerror_reset\\fR, the
 carousel will be homed first. The carousel will then be moved to the new tool's
