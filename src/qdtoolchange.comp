@@ -34,19 +34,19 @@
  *
 *************************************************************************/
 
-component qdtoolchange "EMC HAL component to manage Dana Summit Quickdraw tool changer";
+component qdtoolchange "A real-time hal component to interface to the \\fIDana Summit Quickdraw\\fR tool-changer hardware.";
 
 pin in bit tool_change "Request a tool change. Normally comes from \\fBiocontrol.0.tool-change.";
 pin in signed tool_num "The number of the desired new tool. Range is 0 to the turret-capacity \
 parameter (see below). Normally wired to \\fBiocontrol.0.tool-prep-number\\fR.";
-pin in bit machine_on "Indication that the machine is on. All tool changer operation stops when this input is FALSE. \
+pin in bit machine_on "Indication that the machine is on. All tool-changer operation stops when this input is FALSE. \
 Normally wired to \\fBhalui.machine.is-on\\fR.";
 pin in bit qd_complete "Reset signal from the Quickdraw Tool Changer that the current operation is complete. \
 This should be wired to the contact closure which occurs between the white/black and grey wires (pins\\ 11 and\\ 12 of J7) \
 of the Quickdraw M-Function cable. This input is debounced.";
 pin in bit qd_auto "Indication that the tool changer is in \\fIauto\\fR mode. This can be obtained with a \
-connection to pin\\ 9 (+12V) of the tool changer M-interface connector J7, using pin\\ 8 of J11 as a \
-ground reference. J11 is located directly below J7 in the tool changer electronics. This input is debounced.";
+connection to pin\\ 9 (+12V) of the tool-changer M-interface connector J7, using pin\\ 8 of J11 as a \
+ground reference. J11 is located directly below J7 in the tool-changer electronics. This input is debounced.";
 pin in bit claw_open "Indication that the claw is being held in the open position. This, along \
 with the \\fBqdtoolchange.qd-complete\\fR pin above, means that the Quickdraw hardware is finished with the tool change. \
 This should be wired to the white/red and white/orange wires \
@@ -57,37 +57,37 @@ pin in bit error_reset "Clears any error condition. Normally wired to an operato
 
 pin out bit tool_in_command "\\fITool-In\\fR command to the tool changer. This should \
 be connected to the Orange wire of the M-Function cable (pin\\ 5 of connector \
-J7). Asserting this output causes the tool changer hardware to grab a \
+J7). Asserting this output causes the tool-changer hardware to grab a \
 tool from the carousel and place it in the spindle. The \\fIreset\\fR output from the tool changer is \
 pulsed when the operation is complete.";
 
 pin out bit tool_out_command "\\fITool-Out\\fR command to the tool changer.  This should be \
 connected to the Green wire of the M-Function cable (pin\\ 4 of connector J7). \
-Asserting this output causes the tool changer hardware to remove a tool from \
+Asserting this output causes the tool-changer hardware to remove a tool from \
 the spindle and place it in the pocket in the carousel. The \\fIreset\\fR output from the tool changer is \
 pulsed when the operation is complete.";
 
 pin out bit carousel_cw_command "\\fITurret-CW\\fR command to the tool changer. This \
 should be connected to the Brown wire of the M-Function cable (pin\\ 7 of \
-connector J7). Asserting this output causes the tool changer hardware \
+connector J7). Asserting this output causes the tool-changer hardware \
 to move the carousel clockwise (decreasing pocket numbers). The \\fIreset\\fR output from the tool changer is \
 pulsed each time a pocket passes into position.";
 
 pin out bit carousel_ccw_command "\\fITurret-CCW\\fR command to the tool changer. This \
 should be connected to the Yellow wire of the M-Function cable (pin\\ 6 of \
-connector J7). Asserting this output causes the tool changer hardware \
+connector J7). Asserting this output causes the tool-changer hardware \
 to move the carousel counterclockwise (increasing pocket numbers). The \\fIreset\\fR \
 output from the tool changer is pulsed each time a pocket passes into position.";
 
 pin out bit carousel_home_command "\\fITurret-Home\\fR command to the tool changer. \
 This should be connected to the Blue wire of the M-Function cable (pin\\ 6 of \
-connector J7). Asserting this output causes the tool changer hardware \
+connector J7). Asserting this output causes the tool-changer hardware \
 to move the carousel clockwise to pocket number\\ 1. The \\fIreset\\fR output from the tool changer is pulsed \
 when pocket number\\ 1 passes into position.";
 
 /* Output pins for interface and statua. */
 pin out bit tool_changed "Set TRUE when the a tool change is complete. Normally this is connected to \\fBiocontrol.0.tool-changed\\fR.";
-pin out bit is_homed "Set TRUE when tool changer carousel has been homed. If the tool changer is switched from \
+pin out bit is_homed "Set TRUE when tool-changer carousel has been homed. If the tool changer is switched from \
 AUTO mode, it is assumed to be unhomed since manual movement of the carousel may have occurred.";
 pin out bit ready "Set TRUE when the tool changer is idle and \\fBqdtoolchange.machine-on\\fR, \\fBqdtoolchange.qd-auto\\fR, and \\fBqdtoolchange.claw-open\\fR are all TRUE.";
 pin out unsigned error_code "Error Code output. See the \\fBDESCRIPTION\\fR section for codes.";
@@ -112,23 +112,25 @@ param rw unsigned debounce_period=40 "Time in milliseconds for all debouncing. D
 description """
 
 \\fBqdtoolchange\\fR is a real-time hal component to interface to the
-\\fIDana Summit Quickdraw\\fR tool changer hardware.
+\\fIDana Summit Quickdraw\\fR tool-changer hardware. It communicates with other HAL
+components, manipulates hardware lines to the tool changer, and monitors hardware
+lines from the tool changer.
 
-The tool changer hardware has five inputs to command various actions, and three
+The tool-changer hardware has five inputs to command various actions, and three
 outputs which give operational feedback. All are described in the \\fBPINS\\fR
 section below, however the three hardware outputs are described in more detail here.
 .IP \(bu 4
 The \\fIreset\\fR hardware output signals that the previously-commanded operation is
 complete, or that the carousel has moved one tool pocket.
 .IP \(bu
-The \\fIauto-mode\\fR output is used to determine whether the tool changer
+The \\fIauto-mode\\fR output is used to determine whether the tool-changer
 front panel switch is set to the \\fIauto\\fR position. Note that this
 \\fIauto-mode\\fR output is not part of the standard Summit Quickdraw hardware
 (see \\fBqdtoolchange.qd-auto\\fR in the \\fBPINS\\fR section below).  If the mode switch in
-the upper right of the tool changer panel is placed in the \\fIman\\fR or
-\\fIloc\\fR position or if power to the tool changer hardware is switched off,
+the upper right of the tool-changer panel is placed in the \\fIman\\fR or
+\\fIloc\\fR position or if power to the tool-changer hardware is switched off,
 the logic here does not have control of the hardware and can lose track
-of the tool changer hardware state.  For this reason the carsouel is
+of the tool-changer hardware state.  For this reason the carsouel is
 considered unhomed any time this switch is not in the \\fIauto\\fR position
 with power turned on. This forces a carousel homing operation before a tool
 can be moved to the spindle.
@@ -144,7 +146,7 @@ to signal the operator of the lack of air pressure.
 .PP
 
 When the machine is turned on and the tool changer is switched to \\fIauto\\fR, this
-component controls the tool changer. When starting, the tool changer arm may be
+component controls the tool changer. When starting, the tool-changer arm may be
 at either the carsousel or the spindle but the position of tools must be properly
 configured by hand. If the arm is at the spindle, the pocket in position at the
 carousel must be empty. Conversely, if the arm is at the carousel, the spindle
@@ -160,7 +162,7 @@ together and fed to \\fBiocontrol.0.tool-change.\\fR The
 \\fBiocontrol.tool-prep-number\\fR should be sent to both the manual tool
 change component and to \\fBqdtoolchange.tool-num\\fR.
 
-If an error occurs during operation, tool changer operation stops, an RTAPI
+If an error occurs during operation, tool-changer operation stops, an RTAPI
 error message is issued, \\fBqdtoolchange.error-code\\fR is set to the error
 number (see below), and \\fBqdtoolchange.error-flag\\fR is set TRUE. \\fBqdtoolchange\\fR
 remains in an error state until the \\fBqdtoolchange.error-reset\\fR input is
@@ -297,7 +299,7 @@ static unsigned long long timer;
 static bool completed; // Debounced state of the complete input pin
 static int new_tool_in;
 static int move_cw; // Move the carousel CW
-static bool homed_flag; // Whether the tool changer carousel has been homed.
+static bool homed_flag; // Whether the tool-changer carousel has been homed.
 static bool is_on; // Current state of machine_on
 static int cur_pocket_no; // The tool pocket currently in position. 0 if not homed
 static int error_output; // ORed error conditions
