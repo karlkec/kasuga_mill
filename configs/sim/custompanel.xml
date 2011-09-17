@@ -72,7 +72,6 @@
 					<button><halpin>"MDI-reference"</halpin><text>"Goto Reference"</text></button>
 				</hbox>
 			</labelframe>
-			<label><width>1</width></label>
 			<labelframe text="Optional Stop"> 
 				<font>("Helvetica",11)</font>
 				<bd>3</bd>
@@ -85,45 +84,124 @@
 					<button><halpin>"ostop-off"</halpin><text>"  off  "</text></button>
 				</hbox>
 			</labelframe>
-			<label><width>1</width></label>
-		<labelframe text="Program Control"> 
-		<font>("Helvetica",11)</font>
-		<bd>3</bd>
-			<hbox>
+			<labelframe text="Spindle Motor"> 
+				<bd>3</bd>
+				<font>("Helvetica",11)</font>
 				<vbox>
-					<button><halpin>"pause"</halpin><text>"Pause"</text><bg>"red"</bg></button>
+					<hbox>
+						<relief>RIDGE</relief>         
+						<bd>2</bd>
+						<label><text>"Speed (RPM):"</text><font>("Helvetica",11)</font></label>
+						<label><width>2</width></label>
+						<vbox>
+							<label><text>"Commanded"</text><font>("Helvetica",10)</font></label>
+							<number><halpin>"commanded-rpm"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						</vbox>
+						<label><width>2</width></label>
+						<vbox>
+							<label><text>"Actual"</text><font>("Helvetica",10)</font></label>
+							<number><halpin>"motor-rpm"</halpin><font>("Helvetica",10)</font><format>".0f"</format></number>
+						</vbox>
+						<label><width>1</width></label>
+					</hbox>
+					<hbox>
+						<label><width>1</width></label>
+						<relief>RIDGE</relief>         
+						<bd>2</bd>
+						<vbox>
+							<hbox>
+								<label><width>10</width><text>"Drive Fault:"</text><font>("Helvetica",11)</font></label>
+								<label><width>1</width></label>
+								<led><halpin>"vfd-fault"</halpin><size>20</size><on_color>"red"</on_color><off_color>"grey"</off_color></led>	
+							</hbox>
+						</vbox>
+						<label><width>3</width></label>
+						<button><halpin>"vfd-reset"</halpin><text>" RESET "</text><width>6</width><font>("Helvetica",10)</font></button>
+						<label><width>5</width></label>
+					</hbox>
 				</vbox>
-				<button><halpin>"resume"</halpin><text>"Resume"</text><bg>"green"</bg></button>
-				<button><halpin>"step"</halpin><text>"Single block"</text><bg>"yellow"</bg></button>
-				<vbox>
-				</vbox>
-			</hbox>
-		   </labelframe>
-		</vbox>
-		<vbox>
-			<relief>RIDGE</relief>         
-			<bd>6</bd>
+			</labelframe>
 			<labelframe text="Tool Changer"> 
 				<font>("Helvetica",11)</font>
 				<bd>3</bd>
 				<vbox>
 					<hbox>
-						<label><text>"Quickdraw Auto Switch:"</text></label>
-						<checkbutton><halpin>"qd-auto-mode"</halpin></checkbutton>
+						<label><width>1</width></label>
+						<relief>RIDGE</relief>         
+						<bd>2</bd>
+						<vbox>
+							<hbox>
+								<label><text>"Quickdraw Auto Switch:"</text></label>
+								<checkbutton><halpin>"qd-auto-mode"</halpin></checkbutton>
+							</hbox>
+							<hbox>
+								<label><text>"Air Pressure Present:"</text></label>
+								<checkbutton><halpin>"qd-air-pressure"</halpin></checkbutton>
+							</hbox>
+						</vbox>
 					</hbox>
 					<hbox>
-						<label><text>"Air Pressure Present:"</text></label>
-						<checkbutton><halpin>"qd-air-pressure"</halpin></checkbutton>
-					</hbox>
-					<hbox>
+						<label><width>3</width></label>
 						<radiobutton><choices>["Auto","Manual"]</choices><halpin>"man-auto-sel"</halpin></radiobutton>
+						<!-- For debugging
+						<vbox>
+							<hbox>
+								<label><text>"Tool-In"</text></label>
+								<led><off_color>"black"</off_color><size>15</size><halpin>"tool-in-led"</halpin></led>
+							</hbox>
+							<hbox>
+								<label><text>"Tool-Out"</text></label>
+								<led><off_color>"black"</off_color><size>15</size><halpin>"tool-out-led"</halpin></led>
+							</hbox>
+							<hbox>
+								<label><text>"Carousel-Home"</text></label>
+								<led><off_color>"black"</off_color><size>15</size><halpin>"car-home-led"</halpin></led>
+							</hbox>
+							<hbox>
+								<label><text>"Carousel-CW"</text></label>
+								<led><off_color>"black"</off_color><size>15</size><halpin>"car-cw-led"</halpin></led>
+							</hbox>
+							<hbox>
+								<label><text>"Carousel-CCW"</text></label>
+								<led><off_color>"black"</off_color><size>15</size><halpin>"car-ccw-led"</halpin></led>
+							</hbox>
+						</vbox>
+						-->
 					</hbox>
 					<hbox>
-						<label><text>"Current Tool No:"</text></label>
-						<s32><width>8</width><halpin>"cur-toolno-disp"</halpin></s32>
-						<label><text>"Requested Tool No:"</text></label>
-						<s32><width>8</width><halpin>"req-toolno-disp"</halpin></s32>
+						<relief>RIDGE</relief>         
+						<bd>2</bd>
+						<vbox>
+							<hbox>
+								<label><text>"Ready"</text></label>
+								<led><off_color>"black"</off_color><size>15</size><halpin>"qd-ready-led"</halpin></led>
+							</hbox>
+							<hbox>
+								<vbox>
+									<hbox>
+										<label><text>"Error   "</text></label>
+										<led><off_color>"black"</off_color><on_color>"red"</on_color>
+											<size>15</size><halpin>"error-led"</halpin></led>
+									</hbox>
+								</vbox>
+								<label><width>1</width></label>
+								<button><halpin>"error-reset"</halpin><text>" RESET "</text><width>4</width></button>
+							</hbox>
+						</vbox>
+						<label><width>4</width></label>
+						<vbox>
+							<hbox>
+								<label><text>"Requested Tool No:"</text></label>
+								<s32><width>8</width><halpin>"req-toolno-disp"</halpin></s32>
+							</hbox>
+							<hbox>
+								<label><text>"Current Pocket No:"</text></label>
+								<label><text>" "</text></label>
+								<s32><width>8</width><halpin>"cur-toolno-disp"</halpin></s32>
+							</hbox>
+						</vbox>
 					</hbox>
+					<!-- For debugging
 					<hbox>
 						<label><text>"State:"</text></label>
 						<s32><width>8</width><halpin>"changer-state-disp"</halpin></s32>
@@ -159,39 +237,22 @@
 								<led><off_color>"black"</off_color><size>15</size><halpin>"qd-fault-led"</halpin></led>
 							</hbox>
 						</vbox>
-						<vbox>
-							<hbox>
-								<label><text>"QD Ready"</text></label>
-								<led><off_color>"black"</off_color><size>15</size><halpin>"qd-ready-led"</halpin></led>
-							</hbox>
-							<hbox>
-								<label><text>"Tool-In"</text></label>
-								<led><off_color>"black"</off_color><size>15</size><halpin>"tool-in-led"</halpin></led>
-							</hbox>
-							<hbox>
-								<label><text>"Tool-Out"</text></label>
-								<led><off_color>"black"</off_color><size>15</size><halpin>"tool-out-led"</halpin></led>
-							</hbox>
-							<hbox>
-								<label><text>"Carousel-Home"</text></label>
-								<led><off_color>"black"</off_color><size>15</size><halpin>"car-home-led"</halpin></led>
-							</hbox>
-							<hbox>
-								<label><text>"Carousel-CW"</text></label>
-								<led><off_color>"black"</off_color><size>15</size><halpin>"car-cw-led"</halpin></led>
-							</hbox>
-							<hbox>
-								<label><text>"Carousel-CCW"</text></label>
-								<led><off_color>"black"</off_color><size>15</size><halpin>"car-ccw-led"</halpin></led>
-							</hbox>
-							<hbox>
-								<label><text>"Error"</text></label>
-								<led><off_color>"black"</off_color><size>15</size><halpin>"error-led"</halpin></led>
-								<button><halpin>"error-reset"</halpin><text>" RESET "</text><width>4</width></button>
-							</hbox>
-						</vbox>
 					</hbox>
+					-->
 				</vbox>
+			</labelframe>
+			<labelframe text="Program Control"> 
+				<font>("Helvetica",11)</font>
+				<bd>3</bd>
+				<hbox>
+					<vbox>
+						<button><halpin>"pause"</halpin><text>"Pause"</text><bg>"red"</bg></button>
+					</vbox>
+					<button><halpin>"resume"</halpin><text>"Resume"</text><bg>"green"</bg></button>
+					<button><halpin>"step"</halpin><text>"Single block"</text><bg>"yellow"</bg></button>
+					<vbox>
+					</vbox>
+				</hbox>
 			</labelframe>
 		</vbox>
 	</hbox>

@@ -42,9 +42,11 @@ pin in bit carousel_cw_command "Turret CW command to the tool changer. Moves the
 pin in bit carousel_ccw_command "Turret CCW command to the tool changer. Moves the carousel counterclockwise";
 pin in bit carousel_home_command "Turret Home command to the tool changer.";
 pin in bit air_pressure "To simulate the presence of air pressure";
+pin in bit auto_in "To simulate the AUTO switch of the tool changer. Connect to a user checkbox.";
 
 pin out bit qd_reset "Reset signal from the Quickdraw Tool Changer that the current operation is complete";
 pin out bit claw_open_out "Indication that the claw is being held in the opon position.";
+pin out bit auto_out "To simulate the AUTO switch output from the tool changer. Connect to the tool changer component.";
 pin out float test "Debugging test output";
 
 pin out signed cur_tool_no "Current tool number";
@@ -103,6 +105,12 @@ FUNCTION(_) {
 	if(state_changed) {
 		prev_state = cur_state;
 	} 
+
+	/* If the auto switch is off, we go back to the STATE_IDLE and never give a qd_reset output */
+	if(!auto_in) {
+		cur_state = STATE_IDLE;
+		compl_out = FALSE;
+	}
 
 	/* On entering each state other than IDLE, check for AUTO mode. If not, it's an error. */
 	switch(cur_state) {
@@ -231,5 +239,6 @@ FUNCTION(_) {
 	cur_tool_no = cur_pocket_no;
 	cur_state_out = cur_state;
 	arm_spindle = arm_at_spindle;
+	auto_out = auto_in;
 	test = timer;
 }
