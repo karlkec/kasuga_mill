@@ -159,17 +159,19 @@
                                 <led><off_color>"black"</off_color><size>15</size><halpin>"qd-ready-led"</halpin></led>
                             </hbox>
                             <hbox>
-                                <vbox>
-                                    <hbox>
-                                        <label><text>"Error  "</text></label>
-                                        <led><off_color>"black"</off_color><on_color>"red"</on_color><size>15</size><halpin>"error-led"</halpin></led>
-                                    </hbox>
-                                </vbox>
-                                <label><width>1</width></label>
-                                <button><halpin>"error-reset"</halpin><text>" RESET "</text><width>4</width></button>
+                                <label><text>"Homed"</text></label>
+                                <led><off_color>"black"</off_color><size>15</size><halpin>"homed-led"</halpin></led>
                             </hbox>
                         </vbox>
-                        <label><width>4</width></label>
+                        <label><width>2</width></label>
+                        <vbox>
+                            <hbox>
+                                <label><text>"Error  "</text></label>
+                                <led><off_color>"black"</off_color><on_color>"red"</on_color><size>15</size><halpin>"error-led"</halpin></led>
+                            </hbox>
+                            <button><halpin>"error-reset"</halpin><text>" RESET "</text><width>4</width></button>
+                        </vbox>
+                        <label><width>2</width></label>
                         <vbox>
                             <hbox>
                                 <label><text>"Current Pocket No:"</text></label>
@@ -192,10 +194,6 @@
 							<hbox>
 								<label><text>"Change Request"</text></label>
 								<led><off_color>"black"</off_color><size>15</size><halpin>"request-led"</halpin></led>
-							</hbox>
-							<hbox>
-								<label><text>"Changer is Homed"</text></label>
-								<led><off_color>"black"</off_color><size>15</size><halpin>"homed-led"</halpin></led>
 							</hbox>
 							<hbox>
 								<label><text>"Change Complete"</text></label>

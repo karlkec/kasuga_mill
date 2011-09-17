@@ -44,15 +44,11 @@ net MDI-clear-offset    pyvcp.MDI-clear-offset  =>  halui.mdi-command-05
 
 ############### Quickdraw Tool Changer GUI Interface ################
 
-# Auto-Manual radio button
 net sel-auto-change <= pyvcp.man-auto-sel.Auto => and2.auto.in1
 net sel-man-change <= pyvcp.man-auto-sel.Manual => and2.man.in1
-
-# QD Error LED
 net qd-error <= qdtoolchange.error-flag => pyvcp.error-led
-
-# Reset button
 net qd-error-reset <= pyvcp.error-reset => qdtoolchange.error-reset
+net qdtoolchanger-homed <= qdtoolchange.is-homed => pyvcp.homed-led
 
 # pyvcp hardware monitoring, for debugging
 #net tool-change-auto => pyvcp.request-led
@@ -71,7 +67,6 @@ net qd-error-reset <= pyvcp.error-reset => qdtoolchange.error-reset
 #net qdtoolchanger-state <= qdtoolchange.current-state => pyvcp.changer-state-disp
 net qdtoolchanger-cur-tool <= qdtoolchange.current-tool => pyvcp.cur-toolno-disp
 net tool-prep-number => pyvcp.req-toolno-disp
-#net qdtoolchanger-homed <= qdtoolchange.is-homed => pyvcp.homed-led
 net qdtoolchanger-ready <= qdtoolchange.ready => pyvcp.qd-ready-led
 
 
