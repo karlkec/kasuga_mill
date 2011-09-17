@@ -156,6 +156,7 @@
                         <vbox>
                             <hbox>
                                 <label><text>"Ready"</text></label>
+                                <label><text>" "</text><font>("Helvetica",3)</font></label>
                                 <led><off_color>"black"</off_color><size>15</size><halpin>"qd-ready-led"</halpin></led>
                             </hbox>
                             <hbox>
