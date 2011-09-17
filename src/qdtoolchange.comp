@@ -709,9 +709,9 @@ FUNCTION(_) {
 				rtapi_print_msg(RTAPI_MSG_ERR,error_str[error_output]);
 			} else if(is_error_reset && !was_error_reset && qd_auto_deb) {
 				/* The operator has switched on the tool changer to AUTO mode, and 
-				 *  pressed the reset button. Time to move on. */
+				 *  pressed the reset button. Time to move on, but first home the carousel. */
 				error_output = ERROR_NO_ERROR;
-				cur_state = dequeue_state();
+				cur_state = STATE_CAROUSEL_HOME;
 			} else if(is_error_reset && !was_error_reset) {
 				/* The operator has pressed the reset button but it's still not
 				 *  in AUTO mode. Issue the error message again. */
