@@ -346,6 +346,12 @@ inline int dequeue_state(void) {
 	}
 }
 
+inline void reset_state(void) {
+    /* Set the state to STATE_IDLE and reset the index. */
+    state_index = 0;
+    cur_state = STATE_IDLE;
+}
+
 FUNCTION(_) {
 	/* Maintain the timer. Used for hardware timouts */
 	timer += period;	
@@ -499,9 +505,7 @@ FUNCTION(_) {
 					tool_out_command = TRUE;
 				}
 			} else if(!qd_auto_deb) {
-				/* Not in AUTO mode any more. Stop the operation and wait for it to
-				 *  get turned on again. */
-				enqueue_state(cur_state);
+				/* Not in AUTO mode any more. STATE_AUTO_ERROR will restart the operation. */
 				tool_out_command = FALSE;
 				error_output = ERROR_NOT_AUTO_MODE;
 				cur_state = STATE_AUTO_ERROR;
@@ -528,8 +532,7 @@ FUNCTION(_) {
 					tool_in_command = TRUE;
 				}
 			} else if(!qd_auto_deb) {
-				/* Not in AUTO mode any more. Abort the operation. */
-				enqueue_state(STATE_IDLE);
+				/* Not in AUTO mode any more. STATE_AUTO_ERROR will restart the operation. */
 				tool_in_command = FALSE;
 				error_output = ERROR_NOT_AUTO_MODE;
 				cur_state = STATE_AUTO_ERROR;
@@ -568,7 +571,7 @@ FUNCTION(_) {
 					}
 				}
 			} else if(!qd_auto_deb) {
-				/* Not in AUTO mode any more. Abort the operation. */
+				/* Not in AUTO mode any more. Restart the operation. */
 				enqueue_state(STATE_IDLE);
 				carousel_cw_command = FALSE;
 				carousel_ccw_command = FALSE;
@@ -627,7 +630,7 @@ FUNCTION(_) {
 					carousel_home_command = TRUE;
 				}
 			} else if(!qd_auto_deb) {
-				/* Not in AUTO mode any more. Abort the operation. */
+				/* Not in AUTO mode any more. Restart the operation. */
 				enqueue_state(STATE_IDLE);
 				carousel_home_command = FALSE;
 				error_output = ERROR_NOT_AUTO_MODE;
@@ -709,9 +712,10 @@ FUNCTION(_) {
 				rtapi_print_msg(RTAPI_MSG_ERR,error_str[error_output]);
 			} else if(is_error_reset && !was_error_reset && qd_auto_deb) {
 				/* The operator has switched on the tool changer to AUTO mode, and 
-				 *  pressed the reset button. Time to move on, but first home the carousel. */
+				 *  pressed the reset button. We don't know what's happened so we
+                 *  need to go back and start over. */
 				error_output = ERROR_NO_ERROR;
-				cur_state = STATE_CAROUSEL_HOME;
+				reset_state();
 			} else if(is_error_reset && !was_error_reset) {
 				/* The operator has pressed the reset button but it's still not
 				 *  in AUTO mode. Issue the error message again. */
